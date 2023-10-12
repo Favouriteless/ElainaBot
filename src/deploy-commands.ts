@@ -1,4 +1,4 @@
-const { REST, Routes } = require('discord.js');
+import { REST, Routes } from 'discord.js';
 const { clientId, token } = require('../config.json');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -22,7 +22,6 @@ for (const file of commandFiles) {
 // Construct and prepare an instance of the REST module
 const rest = new REST().setToken(token);
 
-// and deploy your commands!
 (async () => {
 	try {
 		console.log(`Started refreshing ${commands.length} application (/) commands.`);
@@ -33,9 +32,8 @@ const rest = new REST().setToken(token);
 			{ body: commands },
 		);
 
-		console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+		console.log(`Successfully reloaded application (/) commands.`);
 	} catch (error) {
-		// And of course, make sure you catch and log any errors!
 		console.error(error);
 	}
 })();

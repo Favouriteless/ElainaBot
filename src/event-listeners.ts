@@ -1,5 +1,6 @@
-import { Events, BaseInteraction, Message } from 'discord.js';
-import { Client } from '.';
+import { Events, BaseInteraction, Message } from "discord.js";
+import { Client } from ".";
+const autoreplyCommand = require("./commands/autoreply");
 
 export function registerListeners(client: Client) {
 
@@ -38,11 +39,13 @@ export function registerListeners(client: Client) {
     client.on(Events.MessageCreate, async (message: Message) => {
         if (message.author.bot)
             return;
-        if (message.author.username != 'favouriteless')
-            return;
 
-        if (message.content.includes('Elaina'))
-            await message.reply({ content: 'Hello.' });
+        for(const property in autoreplyCommand.replies) {
+            if(message.content.toLowerCase().includes(property)) {
+                message.reply(autoreplyCommand.replies[property]);
+                break;
+            }
+        }
     });
 
 
