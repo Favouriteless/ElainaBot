@@ -11,5 +11,9 @@
   "license": "ISC",
   "dependencies": {
     "discord.js": "^14.13.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.51.0",
+    "typescript": "^5.2.2"
   }
 }
