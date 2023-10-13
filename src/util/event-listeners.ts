@@ -1,16 +1,12 @@
 import { Events, BaseInteraction, Message } from "discord.js";
-import { Client } from ".";
-const autoreplyCommand = require("./commands/autoreply");
+import { Client } from "..";
+const autoreplyCommand = require("../commands/autoreply");
 
 export function registerListeners(client: Client) {
-
-
 
     client.once(Events.ClientReady, c => {
         console.log(`Ready! Logged in as ${c.user.tag}`);
     });
-
-
 
 	client.on(Events.InteractionCreate, async (interaction: BaseInteraction) => {
         if (!interaction.isChatInputCommand()) return;
@@ -34,8 +30,6 @@ export function registerListeners(client: Client) {
         }
     });
 
-
-
     client.on(Events.MessageCreate, async (message: Message) => {
         if (message.author.bot)
             return;
@@ -48,6 +42,4 @@ export function registerListeners(client: Client) {
         }
     });
 
-
-    
 }
