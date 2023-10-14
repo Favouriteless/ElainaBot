@@ -1,6 +1,6 @@
 import { Events, BaseInteraction, Message } from "discord.js";
 import { Client } from "..";
-import { db } from "./db/db";
+import { db, updateReply } from "./db/db";
 
 export function registerListeners(client: Client) {
 
@@ -34,16 +34,21 @@ export function registerListeners(client: Client) {
         if (message.author.bot)
             return;
 
-        const words = message.content.split(/([_\W])/).map(s => s.toLowerCase());
+        const words = message.content.split(/([^A-Za-z0-9?\-_])/).map(s => s.toLowerCase());
         
         const reply = await db.selectFrom('autoreplyreply')
-            .select('autoreplyreply.reply')
+            .select(['autoreplyreply.id', 'autoreplyreply.reply', 'autoreplyreply.lastUsed'])
             .innerJoin('autoreplyterm', 'autoreplyterm.replyId', 'autoreplyreply.id')
             .where('autoreplyterm.term', 'in', words)
             .executeTakeFirst();
         
         if(reply != undefined) {
-            await message.reply(reply.reply)
+            const now = Date.now();
+            const secondsSinceUse = (now - reply.lastUsed) / 1000
+            if(secondsSinceUse > 3600) {
+                updateReply(reply.id, now);
+                await message.reply(reply.reply)
+            }
         }
 
     });

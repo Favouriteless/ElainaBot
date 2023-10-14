@@ -26,10 +26,10 @@ export async function createTerm(term: string, replyId: number) {
         .executeTakeFirst();
 }
 
-export async function updateTerm(termId: number, replyId: number) {
+export async function updateTerm(id: number, replyId: number) {
     return await db.updateTable('autoreplyterm')
         .set({ replyId: replyId })
-        .where('autoreplyterm.id', '=', termId)
+        .where('autoreplyterm.id', '=', id)
         .executeTakeFirst();
 }
 
@@ -44,6 +44,13 @@ export async function getReply(reply: string) {
         .selectAll()
         .where('autoreplyreply.reply', '=', reply)
         .executeTakeFirst();
+}
+
+export async function updateReply(id: number, lastUsed: number) {
+        return await db.updateTable('autoreplyreply')
+            .set({ lastUsed: lastUsed })
+            .where('autoreplyreply.id', '=', id)
+            .executeTakeFirst();
 }
 
 export async function createReply(reply: string) {

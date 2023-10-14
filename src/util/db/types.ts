@@ -12,6 +12,7 @@ export interface Database {
 export interface AutoreplyReplyTable {
 	id: Generated<number>;
 	reply: string;
+	lastUsed: Generated<number>;
 }
 export type AutoreplyReply = Selectable<AutoreplyReplyTable>;
 export type NewAutoreplyReply = Insertable<AutoreplyReplyTable>;
