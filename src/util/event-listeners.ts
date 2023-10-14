@@ -1,6 +1,7 @@
-import { Events, BaseInteraction, Message } from "discord.js";
+import { Events, BaseInteraction, Message, GuildMember } from "discord.js";
 import { db, updateReply } from "./db/db";
 import { Client } from "../elaina";
+import { config } from "./config";
 
 export function registerListeners(client: Client) {
 
@@ -51,6 +52,12 @@ export function registerListeners(client: Client) {
             }
         }
 
+    });
+
+    client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
+        if(config.autoroleEnable) {
+            member.roles.add(config.autoroleRole);
+        }
     });
 
 }

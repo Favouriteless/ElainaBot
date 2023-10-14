@@ -15,9 +15,9 @@ export const db = new Kysely<Database>({
 
 export async function getTerm(term: string) {
 	return await db.selectFrom('autoreplyterm')
-        .selectAll()
-        .where('autoreplyterm.term', '=', term)
-        .executeTakeFirst();
+                .selectAll()
+                .where('autoreplyterm.term', '=', term)
+                .executeTakeFirst();
 }
 
 export async function createTerm(term: string, replyId: number) {
@@ -41,16 +41,16 @@ export async function deleteTerm(term: string) {
 
 export async function getReply(reply: string) {
 	return await db.selectFrom('autoreplyreply')
-        .selectAll()
-        .where('autoreplyreply.reply', '=', reply)
-        .executeTakeFirst();
+                .selectAll()
+                .where('autoreplyreply.reply', '=', reply)
+                .executeTakeFirst();
 }
 
 export async function updateReply(id: number, lastUsed: number) {
         return await db.updateTable('autoreplyreply')
-            .set({ lastUsed: lastUsed })
-            .where('autoreplyreply.id', '=', id)
-            .executeTakeFirst();
+                .set({ lastUsed: lastUsed })
+                .where('autoreplyreply.id', '=', id)
+                .executeTakeFirst();
 }
 
 export async function createReply(reply: string) {
