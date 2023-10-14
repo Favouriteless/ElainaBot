@@ -4,19 +4,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 /**
- * Populates commands collection with all slash commands from the commands directory and it's subfolders. Isn't particularly fast, but only needs to run once on startup.
+ * Populates commands collection with all slash commands from the commands directory and it's subfolders. Not particularly fast, but only needs to run once on startup.
  * @param dir The path of the commands directory.
+ * @param commands (Optional) {@link Collection<string, SlashCommand>} containing any existing commands. If not provided, an empty collection will be used.
  * @returns A collection of all {@link SlashCommand}s and their names, mapped name -> command.
  */
-export async function loadCommands(dir: string, commands: Collection<string, SlashCommand>) : Promise<Collection<string, SlashCommand>> {
+export function loadCommands(dir: string, commands: Collection<string, SlashCommand> = new Collection()) : Collection<string, SlashCommand> {
     let allPaths = fs.readdirSync(dir);
 
     const commandFiles = allPaths.filter((_path: string) => _path.endsWith(".ts")) // All files ending with .ts are asumed to be commands which need loading.
     const subDirs = allPaths.filter((_path: string) => !_path.includes(".")) // Paths which don't contain "." are assumed to be a subdirectory.
 
-    const subDirPromises = [];
     for(const i in subDirs) {
-        subDirPromises.push(loadCommands(path.join(dir, subDirs[i]), commands)); // Keep track of the promise returned by all subdirs -- these are checked recursively and asynchronously.
+        loadCommands(path.join(dir, subDirs[i]), commands); // Load all subdirs -- these are checked recursively.
     }
     
     for (const file of commandFiles) { // Load the command.ts files in this directory.
@@ -29,6 +29,5 @@ export async function loadCommands(dir: string, commands: Collection<string, Sla
             console.log(`[WARNING] The command file at ${filePath} does not export a valid SlashCommand.`);
     }
 
-    await Promise.all(subDirPromises); // Wait for subdirs to finish being loaded, then return the resultant array.
     return commands;
 }

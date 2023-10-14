@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, InteractionResponse } from "discord.js";
-import { SlashCommand } from "../util/slashcommand";
+import { SlashCommand } from "../../util/slashcommand";
   
 class ReactRoleCommand extends SlashCommand {
 

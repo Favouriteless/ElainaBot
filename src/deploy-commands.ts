@@ -1,9 +1,10 @@
 import { REST, Routes } from 'discord.js';
 import { loadCommands } from './util/command-loader';
-const { clientId, token } = require('../config.json');
+import path from 'path';
+const { clientId, token } = require('./data/config.json');
 
 const commandJsons = [];
-const commandFiles = loadCommands();
+const commandFiles = loadCommands(path.join(__dirname, './commands'));
 
 for (const command of commandFiles) {
 	commandJsons.push(command[1].data.toJSON()); // Construct JSON objects from the commands in the folder

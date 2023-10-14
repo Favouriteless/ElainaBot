@@ -1,6 +1,6 @@
 import { Events, BaseInteraction, Message } from "discord.js";
 import { Client } from "..";
-const autoreplyCommand = require("../commands/autoreply");
+import { db } from "./db/db";
 
 export function registerListeners(client: Client) {
 
@@ -34,12 +34,18 @@ export function registerListeners(client: Client) {
         if (message.author.bot)
             return;
 
-        for(const property in autoreplyCommand.replies) {
-            if(message.content.toLowerCase().includes(property)) {
-                message.reply(autoreplyCommand.replies[property]);
-                break;
-            }
+        const words = message.content.split(/([_\W])/).map(s => s.toLowerCase());
+        
+        const reply = await db.selectFrom('autoreplyreply')
+            .select('autoreplyreply.reply')
+            .innerJoin('autoreplyterm', 'autoreplyterm.replyId', 'autoreplyreply.id')
+            .where('autoreplyterm.term', 'in', words)
+            .executeTakeFirst();
+        
+        if(reply != undefined) {
+            await message.reply(reply.reply)
         }
+
     });
 
 }

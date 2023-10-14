@@ -1,21 +1,15 @@
 import { loadCommands } from './util/command-loader';
-import { Client as DJSClient, GatewayIntentBits, Collection, ClientOptions } from 'discord.js';
+import { Client as DJSClient, GatewayIntentBits, Collection } from 'discord.js';
 import { registerListeners } from './util/event-listeners';
 import { SlashCommand } from './util/slashcommand';
 const path = require('node:path');
-const { token } = require('../config.json');
+const { token } = require('./data/config.json');
 
 export class Client extends DJSClient  {
-    commands: Collection<string, SlashCommand> = new Collection();
+    commands: Collection<string, SlashCommand> = loadCommands(path.join(__dirname, './commands')); // Populate client commands list.
 }
 
-(async () => { // Run this in an anonymous self-executing async function as loadCommands is also async.
-    const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.MessageContent] });
-    await loadCommands(path.join(__dirname, './commands'), client.commands); // Populate client commands list.
-    registerListeners(client);
-    client.login(token);
-})();
-
-
-
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.MessageContent] });
+registerListeners(client);
+client.login(token);
 
