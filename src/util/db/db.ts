@@ -4,7 +4,7 @@ import SQLite from 'better-sqlite3';
 import path from 'path';
 
 const dialect = new SqliteDialect({
-	database: new SQLite(path.join(__dirname, '../../data/database.db'))
+	database: new SQLite(path.join(__dirname, '../../../data/database.db'))
 });
 
 export const db = new Kysely<Database>({

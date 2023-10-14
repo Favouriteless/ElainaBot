@@ -1,5 +1,5 @@
 import { Events, BaseInteraction, Message } from "discord.js";
-import { Client } from "..";
+import { Client } from "../app";
 import { db, updateReply } from "./db/db";
 
 export function registerListeners(client: Client) {
