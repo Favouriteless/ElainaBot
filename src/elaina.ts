@@ -12,4 +12,3 @@ export class Client extends DJSClient  {
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.MessageContent] });
 registerListeners(client);
 client.login(token);
-
