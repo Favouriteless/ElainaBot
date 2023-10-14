@@ -12,8 +12,8 @@ const path = require('node:path');
 export function loadCommands(dir: string, commands: Collection<string, SlashCommand> = new Collection()) : Collection<string, SlashCommand> {
     let allPaths = fs.readdirSync(dir);
 
-    const commandFiles = allPaths.filter((_path: string) => _path.endsWith(".ts")) // All files ending with .ts are asumed to be commands which need loading.
-    const subDirs = allPaths.filter((_path: string) => !_path.includes(".")) // Paths which don't contain "." are assumed to be a subdirectory.
+    const commandFiles = allPaths.filter((_path: string) => _path.endsWith('.ts') || _path.endsWith('.js')) // All files ending with .ts or js are asumed to be commands which need loading.
+    const subDirs = allPaths.filter((_path: string) => !_path.includes('.')) // Paths which don't contain "." are assumed to be a subdirectory.
 
     for(const i in subDirs) {
         loadCommands(path.join(dir, subDirs[i]), commands); // Load all subdirs -- these are checked recursively.
