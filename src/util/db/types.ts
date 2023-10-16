@@ -5,6 +5,7 @@ import { Generated, Insertable, Selectable, Updateable } from "kysely";
 export interface Database {
 	autoreplyreply: AutoreplyReplyTable;
 	autoreplyterm: AutoreplyTermTable;
+	reactionrole: ReactionRoleTable;
 }
 
 // ------------------------------ TABLES ------------------------------
@@ -27,3 +28,13 @@ export interface AutoreplyTermTable {
 export type AutoreplyTerm = Selectable<AutoreplyTermTable>;
 export type NewAutoreplyTerm = Insertable<AutoreplyTermTable>;
 export type AutoreplyTermUpdate = Updateable<AutoreplyTermTable>;
+
+export interface ReactionRoleTable {
+	messageId: string;
+	emoteId: string;
+	roleId: string;
+}
+
+export type ReactionRole = Selectable<ReactionRoleTable>;
+export type NewReactionRole = Insertable<ReactionRoleTable>;
+export type ReactionRoleUpdate = Updateable<ReactionRoleTable>;

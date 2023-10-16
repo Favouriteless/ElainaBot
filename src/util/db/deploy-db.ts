@@ -14,4 +14,12 @@ import { db } from "./db";
         .addColumn('term', 'text', col => col.notNull())
         .addColumn('replyId', 'integer', col => col.notNull().references('autoreplyreply.id').onDelete('cascade'))
         .execute();
+
+    db.schema.createTable('reactionrole')
+        .ifNotExists()
+        .addColumn('messageId', 'text', col => col.notNull())
+        .addColumn('emoteId', 'text', col => col.notNull())
+        .addColumn('roleId', 'text', col => col.notNull())
+        .addPrimaryKeyConstraint('primary_key', ['messageId', 'emoteId'])
+        .execute();
 })();

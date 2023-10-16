@@ -21,16 +21,16 @@ export async function getTerm(term: string) {
 }
 
 export async function createTerm(term: string, replyId: number) {
-    return await db.insertInto('autoreplyterm')
-        .values({ term: term, replyId: replyId })
-        .executeTakeFirst();
+        return await db.insertInto('autoreplyterm')
+                .values({ term: term, replyId: replyId })
+                .executeTakeFirst();
 }
 
 export async function updateTerm(id: number, replyId: number) {
-    return await db.updateTable('autoreplyterm')
-        .set({ replyId: replyId })
-        .where('autoreplyterm.id', '=', id)
-        .executeTakeFirst();
+        return await db.updateTable('autoreplyterm')
+                .set({ replyId: replyId })
+                .where('autoreplyterm.id', '=', id)
+                .executeTakeFirst();
 }
 
 export async function deleteTerm(term: string) {
@@ -54,7 +54,35 @@ export async function updateReply(id: number, lastUsed: number) {
 }
 
 export async function createReply(reply: string) {
-    return await db.insertInto('autoreplyreply')
-        .values({ reply: reply })
-        .executeTakeFirst();
+        return await db.insertInto('autoreplyreply')
+                .values({ reply: reply })
+                .executeTakeFirst();
+}
+
+export async function getReactionRole(messageId: string, emoteId: string) {
+        return await db.selectFrom('reactionrole')
+                .where('messageId', '=', messageId)
+                .where('emoteId', '=', emoteId)
+                .executeTakeFirst();
+}
+
+export async function createReactionRole(messageId: string, emoteId: string, roleId: string) {
+        return await db.insertInto('reactionrole')
+                .values({ messageId: messageId, emoteId: emoteId, roleId: roleId})
+                .executeTakeFirst();
+}
+
+export async function updateReactionRole(messageId: string, emoteId: string, roleId: string) {
+        return await db.updateTable('reactionrole')
+                .where('messageId', '=', messageId)
+                .where('emoteId', '=', emoteId)
+                .set({ roleId: roleId })
+                .executeTakeFirst();
+}
+
+export async function deleteReactionRole(messageId: string, emoteId: string) {
+        return await db.deleteFrom('reactionrole')
+                .where('messageId', '=', messageId)
+                .where('emoteId', '=', emoteId)
+                .executeTakeFirst();
 }
