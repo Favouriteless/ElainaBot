@@ -10,6 +10,9 @@ export function registerListeners(client: Client) {
     client.once(Events.ClientReady, c => console.log(`Ready! Logged in as ${c.user.tag}`));
     client.on(Events.GuildMemberAdd, async (member: GuildMember) => { if(config.autoroleEnable) member.roles.add(config.autoroleRole); });
 
+    registerAutoreplyListeners(client);
+    registerReactionRoleListeners(client);
+
     // Slash command listener
 	client.on(Events.InteractionCreate, async (interaction: BaseInteraction) => {
         if (!interaction.isChatInputCommand()) return;
@@ -33,7 +36,10 @@ export function registerListeners(client: Client) {
         }
     });
 
-    registerAutoreplyListeners(client);
-    registerReactionRoleListeners(client);
+    // Say hello listener.
+    client.on(Events.MessageCreate, async (message: Message) => {
+        if(!message.author.bot && config.helloEmojiEnabled && message.content.toLowerCase().includes('elaina'))
+            message.react(config.helloEmoji);
+    });
 
 }

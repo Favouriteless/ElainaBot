@@ -9,7 +9,7 @@ export function registerAutoreplyListeners(client: Client) {
             return;
 
         let words = message.content.match(/(\?*[\w\-]+)/g); // Regex matches 0/more ? followed by 1/more alphanumeric (or -_) characters
-        if(words == null)
+        if(!words)
             return;
         
         const keywords = words.map(s => s.toLowerCase());

@@ -36,7 +36,7 @@ class ReactRoleCommand extends SlashCommand {
         if(!/(\d{17,19})/.test(message))
             return await interaction.reply({ content: `Elaina thinks '${message}' is not a valid message ID.`})
 
-            const emojiString = interaction.options.getString('emoji');
+        const emojiString = interaction.options.getString('emoji');
         if(emojiString == null) // Validate emoji is present, it should be required but just in case.
             return await interaction.reply({ content: 'emoji was not present in command.', ephemeral: true });
         if(!/<?(a)?:?(\w{2,32}):(\d{17,19})>?/.test(emojiString))

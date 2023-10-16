@@ -1,6 +1,7 @@
 import { Events, Guild, Message, MessageReaction, PartialMessage, PartialMessageReaction, PartialUser, User } from "discord.js";
 import { Client } from "../elaina";
 import { deleteReactionRoles, getReactionRole } from "./db/db";
+import { getMember } from "./util";
 
 export function registerReactionRoleListeners(client: Client) {
 
@@ -54,15 +55,8 @@ export function registerReactionRoleListeners(client: Client) {
 
     client.on(Events.MessageDelete, async (message: Message | PartialMessage) => {
         const result = await deleteReactionRoles(message.id); // Clean up reaction roles for messages which get deleted.
-        if(result.length > 0)
-            console.log(`Deleted ${result.length} reaction role entries.`);
+        if(result.numDeletedRows > 0)
+            console.log(`Deleted ${result.numDeletedRows} reaction role entries.`);
     });
     
-}
-
-async function getMember(guild: Guild, id: string) {
-    let member = guild.members.cache.get(id);
-    if(member === undefined)
-        member = await guild.members.fetch(id);
-    return member;
 }

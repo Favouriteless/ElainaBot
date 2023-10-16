@@ -4,6 +4,8 @@ import path from 'path';
 interface Config {
     autoroleRole: string;
     autoroleEnable: boolean;
+    helloEmoji: string;
+    helloEmojiEnabled: boolean;
 }
 
 

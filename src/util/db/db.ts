@@ -91,5 +91,5 @@ export async function deleteReactionRole(messageId: string, emoteId: string) {
 export async function deleteReactionRoles(messageId: string) {
         return await db.deleteFrom('reactionrole')
                 .where('messageId', '=', messageId)
-                .execute();
+                .executeTakeFirst();
 }

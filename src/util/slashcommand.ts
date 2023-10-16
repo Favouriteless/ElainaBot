@@ -1,6 +1,10 @@
 import { ChatInputCommandInteraction, InteractionResponse, SlashCommandBuilder, SlashCommandSubcommandBuilder, SlashCommandSubcommandsOnlyBuilder } from "discord.js";
 
-export type CommandBuilder = SlashCommandBuilder | SlashCommandSubcommandBuilder | SlashCommandSubcommandsOnlyBuilder;
+export type CommandBuilder = 
+| SlashCommandBuilder 
+| SlashCommandSubcommandBuilder 
+| SlashCommandSubcommandsOnlyBuilder 
+| Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">;
 
 export abstract class SlashCommand {
     data: CommandBuilder;
