@@ -16,6 +16,6 @@ const client = new Client({ intents: [
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers
-], partials: [Partials.Reaction]});
+], partials: [Partials.Reaction, Partials.Message, Partials.User] });
 registerListeners(client);
 client.login(token);

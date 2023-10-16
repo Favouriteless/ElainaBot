@@ -61,6 +61,7 @@ export async function createReply(reply: string) {
 
 export async function getReactionRole(messageId: string, emoteId: string) {
         return await db.selectFrom('reactionrole')
+                .selectAll()
                 .where('messageId', '=', messageId)
                 .where('emoteId', '=', emoteId)
                 .executeTakeFirst();
@@ -85,4 +86,10 @@ export async function deleteReactionRole(messageId: string, emoteId: string) {
                 .where('messageId', '=', messageId)
                 .where('emoteId', '=', emoteId)
                 .executeTakeFirst();
+}
+
+export async function deleteReactionRoles(messageId: string) {
+        return await db.deleteFrom('reactionrole')
+                .where('messageId', '=', messageId)
+                .execute();
 }
