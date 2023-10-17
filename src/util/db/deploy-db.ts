@@ -6,6 +6,7 @@ import { db } from "./db";
         .addColumn('id', 'integer', col => col.primaryKey().autoIncrement())
         .addColumn('reply', 'text', col => col.notNull())
         .addColumn('lastUsed', 'integer', col => col.defaultTo(0))
+        .addColumn('ignoreCooldown', 'boolean', col => col.defaultTo(false))
         .execute();
 
     db.schema.createTable('autoreplyterm')
@@ -22,4 +23,8 @@ import { db } from "./db";
         .addColumn('roleId', 'text', col => col.notNull())
         .addPrimaryKeyConstraint('primary_key', ['messageId', 'emoteId'])
         .execute();
+
+    db.schema.alterTable('autoreplyreply')
+        .addColumn('ignoreCooldown', 'boolean', col => col.defaultTo(false))
+        .execute()
 })();

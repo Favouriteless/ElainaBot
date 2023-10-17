@@ -78,10 +78,10 @@ class AutoReplyCommand extends SlashCommand {
     async remove(interaction: ChatInputCommandInteraction, term : string) : Promise<InteractionResponse<boolean>> {
         const result = await deleteTerm(term);
         if(result.numDeletedRows <= 0)
-            interaction.reply({ content: `Elaina could not find a response to '${term}' in her database.`, ephemeral: false });
+            interaction.reply({ content: `Elaina could not find a response to '${term}' in her database.`, ephemeral: true });
 
         console.log(`Removed term '${term}' from the auto-replies list.`);
-        return await interaction.reply({ content: `Elaina will stop to replying to '${term}'.`, ephemeral: false });
+        return await interaction.reply({ content: `Elaina will stop to replying to '${term}'.`, ephemeral: true });
     }
 
 }

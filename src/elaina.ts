@@ -2,7 +2,7 @@ import { loadCommands } from './util/command-loader';
 import { Client as DJSClient, GatewayIntentBits, Collection, Partials } from 'discord.js';
 import { registerListeners } from './util/event-listeners';
 import { SlashCommand } from './util/slashcommand';
-const path = require('node:path');
+import path from 'node:path';
 const { token } = require('../data/bot-details.json');
 
 
