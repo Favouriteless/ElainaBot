@@ -53,9 +53,9 @@ export async function updateReply(id: number, lastUsed: number) {
                 .executeTakeFirst();
 }
 
-export async function createReply(reply: string) {
+export async function createReply(reply: string, ignoreCooldown: boolean = false) {
         return await db.insertInto('autoreplyreply')
-                .values({ reply: reply })
+                .values({ reply: reply, ignoreCooldown: (ignoreCooldown ? 1 : 0) })
                 .executeTakeFirst();
 }
 

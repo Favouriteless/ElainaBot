@@ -15,6 +15,7 @@ class AutoReplyCommand extends SlashCommand {
                     .setDescription('Make Elaina reply to a term.')
                     .addStringOption(option => option.setName('term').setDescription('The term to be replied to.').setRequired(true))
                     .addStringOption(option => option.setName('reply').setDescription('The message to reply with.').setRequired(true))
+                    .addBooleanOption(option => option.setName('ignore').setDescription('Ignore the cooldown for auto replying.').setRequired(false))
             )
             .addSubcommand(subcommand =>
                 subcommand
@@ -38,6 +39,7 @@ class AutoReplyCommand extends SlashCommand {
                 return await this.remove(interaction, term);
         }
         catch(error) {
+            console.log(error);
             return await interaction.reply({ content: `Elaina can't do this, something went wrong.`, ephemeral: true });
         }
 
@@ -47,7 +49,7 @@ class AutoReplyCommand extends SlashCommand {
 
 
     /**
-     * Command handler for adding a reply to a term.
+     * Command handler for adding a reply to a te]#rm.
      */
     async add(interaction: ChatInputCommandInteraction, term : string) : Promise<InteractionResponse<boolean>> {
         let reply = interaction.options.getString('reply');
@@ -57,8 +59,10 @@ class AutoReplyCommand extends SlashCommand {
 
         // Grab reply if one with this text already exists and create new one if it doesn't.
         let replyId = (await getReply(reply))?.id;
-        if(replyId === undefined)
-            replyId = Number((await createReply(reply)).insertId)
+        if(replyId === undefined) {
+            const cooldown = interaction.options.getBoolean('ignore');
+            replyId = Number((await createReply(reply, cooldown ? cooldown : false)).insertId)
+        }
         
         const existingTerm = await getTerm(term);
         if(existingTerm === undefined)

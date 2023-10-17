@@ -14,7 +14,7 @@ export interface AutoreplyReplyTable {
 	id: Generated<number>;
 	reply: string;
 	lastUsed: Generated<number>;
-	ignoreCooldown: Generated<boolean>;
+	ignoreCooldown: number;
 }
 export type AutoreplyReply = Selectable<AutoreplyReplyTable>;
 export type NewAutoreplyReply = Insertable<AutoreplyReplyTable>;

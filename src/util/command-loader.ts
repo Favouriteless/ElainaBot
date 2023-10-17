@@ -1,7 +1,7 @@
 import { Collection } from 'discord.js';
 import { SlashCommand } from './slashcommand';
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * Populates commands collection with all slash commands from the commands directory and it's subfolders. Not particularly fast, but only needs to run once on startup.

@@ -169,3 +169,7 @@ compile_commands.json
 *.db
 dist/*
 data/bot-details.json
+src/update-db.ts
+src/update-db.ts
+src/update-db.ts
+src/update-db.ts

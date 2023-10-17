@@ -15,17 +15,22 @@ export function registerAutoreplyListeners(client: Client) {
         const keywords = words.map(s => s.toLowerCase());
         
         const reply = await db.selectFrom('autoreplyreply')
-            .select(['autoreplyreply.id', 'autoreplyreply.reply', 'autoreplyreply.lastUsed'])
+            .select(['autoreplyreply.id', 'autoreplyreply.reply', 'autoreplyreply.lastUsed', 'autoreplyreply.ignoreCooldown'])
             .innerJoin('autoreplyterm', 'autoreplyterm.replyId', 'autoreplyreply.id')
             .where('autoreplyterm.term', 'in', keywords)
             .executeTakeFirst();
         
-        if(reply != undefined) {
-            const now = Date.now();
-            const secondsSinceUse = (now - reply.lastUsed) / 1000
-            if(secondsSinceUse > 3600) {
-                updateReply(reply.id, now);
-                await message.reply(reply.reply)
+        if(reply !== undefined) {
+            if(reply.ignoreCooldown == 1) {
+                message.reply(reply.reply);
+            }
+            else {
+                const now = Date.now();
+                const secondsSinceUse = (now - reply.lastUsed) / 1000
+                if(secondsSinceUse > 3600) {
+                    updateReply(reply.id, now);
+                    message.reply(reply.reply);
+                }
             }
         }
     });
