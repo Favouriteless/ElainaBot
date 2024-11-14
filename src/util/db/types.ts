@@ -1,41 +1,17 @@
-import { Generated, Insertable, Selectable, Updateable } from "kysely";
+import { Insertable, Selectable, Updateable } from "kysely";
 
 // ----------------------------- DATABASE -----------------------------
 
 export interface Database {
-	autoreplyreply: AutoreplyReplyTable;
-	autoreplyterm: AutoreplyTermTable;
-	reactionrole: ReactionRoleTable;
+	macro: MacroTable;
 }
 
 // ------------------------------ TABLES ------------------------------
 
-export interface AutoreplyReplyTable {
-	id: Generated<number>;
+export interface MacroTable {
+	macro: string;
 	reply: string;
-	lastUsed: Generated<number>;
-	ignoreCooldown: number;
 }
-export type AutoreplyReply = Selectable<AutoreplyReplyTable>;
-export type NewAutoreplyReply = Insertable<AutoreplyReplyTable>;
-export type AutoreplyReplyUpdate = Updateable<AutoreplyReplyTable>;
-
-
-export interface AutoreplyTermTable {
-	id: Generated<number>;
-	term: string;
-	replyId: number;
-}
-export type AutoreplyTerm = Selectable<AutoreplyTermTable>;
-export type NewAutoreplyTerm = Insertable<AutoreplyTermTable>;
-export type AutoreplyTermUpdate = Updateable<AutoreplyTermTable>;
-
-export interface ReactionRoleTable {
-	messageId: string;
-	emoteId: string;
-	roleId: string;
-}
-
-export type ReactionRole = Selectable<ReactionRoleTable>;
-export type NewReactionRole = Insertable<ReactionRoleTable>;
-export type ReactionRoleUpdate = Updateable<ReactionRoleTable>;
+export type Macro = Selectable<MacroTable>;
+export type NewMacro = Insertable<MacroTable>;
+export type UpdateMacro = Updateable<MacroTable>;

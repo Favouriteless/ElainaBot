@@ -1,25 +1,24 @@
 {
   "name": "elainabot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Elaina discord bot",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "scripts": {},
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Favouriteless",
+  "license": "All Rights Reserved",
   "dependencies": {
-    "better-sqlite3": "^9.0.0",
-    "discord.js": "^14.13.0",
-    "kysely": "^0.26.3",
-    "reflect-metadata": "^0.1.13"
+    "better-sqlite3": "^11.5.0",
+    "discord.js": "^14.16.3",
+    "kysely": "^0.27.4",
+    "node": "^23.2.0",
+    "typescript": "^5.6.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.5",
-    "@types/node": "^20.8.5",
-    "@types/validator": "^13.11.3",
-    "eslint": "^8.51.0",
-    "typescript": "^5.2.2"
+    "@eslint/js": "^9.14.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/eslint__js": "^8.42.3",
+    "eslint": "^9.14.0",
+    "typescript-eslint": "^8.14.0"
   }
 }

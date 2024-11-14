@@ -10,7 +10,7 @@ import path from 'node:path';
  * @returns A collection of all {@link SlashCommand}s and their names, mapped name -> command.
  */
 export function loadCommands(dir: string, commands: Collection<string, SlashCommand> = new Collection()) : Collection<string, SlashCommand> {
-    let allPaths = fs.readdirSync(dir);
+    const allPaths = fs.readdirSync(dir);
 
     const commandFiles = allPaths.filter((_path: string) => _path.endsWith('.ts') || _path.endsWith('.js')) // All files ending with .ts or js are asumed to be commands which need loading.
     const subDirs = allPaths.filter((_path: string) => !_path.includes('.')) // Paths which don't contain "." are assumed to be a subdirectory.
@@ -21,6 +21,7 @@ export function loadCommands(dir: string, commands: Collection<string, SlashComm
     
     for (const file of commandFiles) { // Load the command.ts files in this directory.
         const filePath = path.join(dir, file);
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const command = require(filePath);
 
         if (command instanceof SlashCommand)

@@ -1,7 +1,7 @@
 import { REST, Routes } from 'discord.js';
 import { loadCommands } from './util/command-loader';
 import path from 'path';
-const { clientId, token } = require('../data/bot-details.json');
+import { clientId, token } from '../data/bot-details.json';
 
 const commandJsons = [];
 const commandFiles = loadCommands(path.join(__dirname, './commands'));
