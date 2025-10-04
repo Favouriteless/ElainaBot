@@ -1,7 +1,16 @@
 package main
 
-import "ElainaBot/discord"
+import (
+	"ElainaBot/discord"
+	"fmt"
+	"log"
+)
 
 func main() {
-	_ = discord.LoadSecrets()
+	_, err := discord.CreateClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Passed initialisation")
 }
