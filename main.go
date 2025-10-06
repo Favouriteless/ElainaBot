@@ -7,10 +7,9 @@ import (
 )
 
 func main() {
-	_, err := discord.CreateClient()
+	_, err := discord.CreateClient("ElainaBot")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	fmt.Println("Passed initialisation")
 }
