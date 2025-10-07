@@ -30,8 +30,12 @@ type Identify struct {
 	Intents    int                  `json:"intents"`
 }
 
-type ConnectionProperties struct {
-	Os      string `json:"os"`
-	Browser string `json:"browser"`
-	Device  string `json:"device"`
+// Ready is sent by discord after the client has successfully identified itself and is ready to receive events
+type Ready struct {
+	ApiVersion       int         `json:"v"`
+	User             User        `json:"user"`
+	Guilds           []Guild     `json:"guilds"`
+	SessionId        string      `json:"session_id"`
+	ResumeGatewayUrl string      `json:"resume_gateway_url"`
+	Application      Application `json:"application"`
 }
