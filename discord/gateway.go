@@ -12,6 +12,22 @@ import (
 
 const getGatewayUrl = apiUrl + "/gateway/bot"
 
+// Gateway stores a Client's gateway connection details
+type Gateway struct {
+	conn       *websocket.Conn // Websocket connection for the client. This may be nil at times, always use the sendBuffer where applicable.
+	sendBuffer chan []byte     // Thread-safe buffer for writing packets to a websocket connection, it also prevents losing payloads when reconnecting.
+
+	cancelWriter  chan bool // Writing any value to this channel will stop the websocket writer routine. You shouldn't access this directly.
+	cardiacArrest chan bool // Writing to cardiac arrest will make the client stop sending heartbeats
+
+	url       string // URL for connecting to Discord's Gateway API
+	resumeUrl string // URL for resuming a gateway connection
+	sessionId string // ID of gateway session, only applicable if resuming
+	sequence  *int   // The last sequence number the client received from gateway
+
+	heartbeatAcknowledged bool // Set to false when the client sends a heartbeat. If discord doesn't acknowledge before the next heartbeat, we reconnect. No mutex needed as booleans don't tear and there's a large interval
+}
+
 // GatewayPayload represents a gateway payload for discord API. Pointers are for optional fields to encode as NULL
 // See: https://discord.com/developers/docs/events/gateway-events#payload-structure
 type GatewayPayload struct {
@@ -21,13 +37,52 @@ type GatewayPayload struct {
 	EventName   *string          `json:"t"`  // EventName of the payload held in Data. Will be omitted if Opcode is not 0.
 }
 
+// SendPayload sends the given GatewayPayload on the websocket connection if one is open, or errors if there is no valid
+// connection or the payload fails to encode
+func (gateway *Gateway) SendPayload(payload *GatewayPayload) error {
+	if gateway.sendBuffer == nil || gateway.conn == nil {
+		return errors.New("cannot send a gateway payload without a valid connection being open")
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	gateway.sendBuffer <- encoded
+	return nil
+}
+
+// SendEvent sends the given GatewayEvent on the websocket connection if one is open, or errors if there is no valid
+// connection or the event/payload fails to encode
+func (gateway *Gateway) SendEvent(event *GatewayEvent) error {
+	t := (*event).Type()
+	enc, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return gateway.SendPayload(&GatewayPayload{
+		Opcode:      0,
+		Data:        (*json.RawMessage)(&enc),
+		SequenceNum: gateway.sequence,
+		EventName:   &t,
+	})
+}
+
+func (gateway *Gateway) Close() {
+	if gateway.conn == nil {
+		return
+	}
+	gateway.cardiacArrest <- true
+	gateway.cancelWriter <- true // Make sure we stop trying to write to the socket. Reader will close itself when it errors.
+	gateway.conn.Close()
+}
+
 func (client *Client) StartGatewaySession() error {
-	if client.gateway.gatewayUrl == "" {
+	if client.Gateway.url == "" {
 		if err := client.fetchGatewayUrl(3); err != nil {
 			return err
 		}
 	}
-	if err := client.connectGateway(client.gateway.gatewayUrl); err != nil {
+	if err := client.connectGateway(client.Gateway.url); err != nil {
 		return err
 	}
 	client.identify() // After identifying, discord will either close the connection or start sending events
@@ -36,12 +91,12 @@ func (client *Client) StartGatewaySession() error {
 
 // connectGateway attempts to initiate a websocket connection with Discord's Gateway API (https://discord.com/developers/docs/events/overview)
 // and start listening for events. It will either block until the connection has closed, or return an error when something
-// goes wrong during initialisation. Process is as follows:
+// goes wrong during initialisation. NOT responsible for sending an IDENTIFY or RESUME payload.
 //
 // 1.) Send HTTP upgrade request
 // 2.) Wait for Discord's hello payload
 // 3.) Start heartbeats
-func (client *Client) connectGateway(url string, closeCode chan<- int) error {
+func (client *Client) connectGateway(url string) error {
 	if url == "" {
 		return errors.New("cannot connect to an empty url")
 	}
@@ -52,72 +107,56 @@ func (client *Client) connectGateway(url string, closeCode chan<- int) error {
 		return err
 	}
 
-	defer conn.Close()
-	conn.SetCloseHandler(func(code int, text string) error {
-		closeCode <- code
-		return nil
-	})
+	// TODO: Rewrite close handler
 
 	var hello Hello
 	if err = readKnownGatewayEvent(conn, &hello); err != nil { // First payload sent by discord should be a Hello https://discord.com/developers/docs/events/gateway#connection-lifecycle
 		return err
 	}
 
-	stopBeating := make(chan bool)
-	go client.startBeating(time.Millisecond*time.Duration(hello.HeartbeatInterval), stopBeating)
+	client.Gateway.cardiacArrest = make(chan bool)
+	client.Gateway.sendBuffer = make(chan []byte, 3) // Arbitrary capacity to prevent blocking.
+
+	go client.Gateway.startBeating(time.Millisecond * time.Duration(hello.HeartbeatInterval))
+	go handleGatewayWrite(conn, client.Gateway.sendBuffer, client.Gateway.cardiacArrest)
+	go handleGatewayRead(conn, client)
+
 	log.Println("Gateway connection established")
-
-	client.gateway.sendBuffer = make(chan []byte, 3) // Arbitrary capacity to prevent blocking.
-	stopWriter := make(chan bool)
-	readerStopped := make(chan error)
-
-	go handleGatewayWrite(conn, client.gateway.sendBuffer, stopWriter)
-	go handleGatewayRead(conn, client, readerStopped)
-
-out: // The writer will gracefully handle errors, but we can assume the connection closed if the reader stops.
-	for {
-		select {
-		case err = <-readerStopped:
-			log.Printf("Stopping gateway reader: %s", err)
-			break out
-		}
-	}
-
-	stopBeating <- true // Stop all subtasks when the reader is done
-	stopWriter <- true
-	client.gateway.sendBuffer = nil
 	return nil
 }
 
-func (client *Client) startBeating(interval time.Duration, stop <-chan bool) {
+func (gateway *Gateway) startBeating(interval time.Duration) {
+	if gateway.conn == nil || gateway.cardiacArrest == nil {
+		return
+	}
 	for {
 		select {
-		case <-stop:
+		case <-gateway.cardiacArrest:
 			return
 		default:
-			client.heartbeat()
+			gateway.heartbeat()
 			time.Sleep(interval)
 		}
 	}
 }
 
 // heartbeat creates and sends a Heartbeat payload to the Gateway API
-func (client *Client) heartbeat() {
+func (gateway *Gateway) heartbeat() {
 	payload := GatewayPayload{Opcode: opHeartbeat, Data: nil}
-	if client.gateway.sequence != nil {
-		if d, err := json.Marshal(*client.gateway.sequence); err == nil {
+	if gateway.sequence != nil {
+		if d, err := json.Marshal(*(gateway.sequence)); err == nil {
 			payload.Data = (*json.RawMessage)(&d)
 		} else {
-			panic(err)
+			panic(err) // Should never be hit
 		}
 	}
 
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		panic(err)
+		panic(err) // Should never be hit
 	}
-	client.gateway.sendBuffer <- encoded
-	client.gateway.heartbeatAcknowledged = false
+	gateway.sendBuffer <- encoded
+	gateway.heartbeatAcknowledged = false
 	log.Println("Sending heartbeat...")
 }
 
@@ -140,7 +179,7 @@ func (client *Client) identify() {
 	if err != nil {
 		panic(err)
 	}
-	client.gateway.sendBuffer <- encoded
+	client.Gateway.sendBuffer <- encoded
 	log.Println("Sending identify...")
 }
 
@@ -154,7 +193,7 @@ func handleGatewayWrite(conn *websocket.Conn, payloads <-chan []byte, stop <-cha
 		case payload := <-payloads:
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				log.Printf("Failed to write to gateway websocket: %s", err)
-				return
+				return // This should never be hit, but just in case
 			}
 		}
 	}
@@ -162,27 +201,26 @@ func handleGatewayWrite(conn *websocket.Conn, payloads <-chan []byte, stop <-cha
 
 // handleGatewayRead reads all payloads from a websocket connection and delegates their handling to relevant functions.
 // No stop flag is needed as the connection will return an error when it closes anyway.
-func handleGatewayRead(conn *websocket.Conn, client *Client, done chan<- error) {
+func handleGatewayRead(conn *websocket.Conn, client *Client) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			done <- err
 			return
 		}
-		payload, err := decodeGatewayPayload(msg)
-		if err != nil {
-			done <- err
+		var payload GatewayPayload
+		if err = json.Unmarshal(msg, &payload); err != nil {
+			log.Printf("Failed to decode gateway message: %s", err)
 			return
 		}
 
 		switch payload.Opcode {
 		case opHeartbeat:
 			log.Println("Discord requested a heartbeat")
-			client.heartbeat()
+			client.Gateway.heartbeat()
 		case opHeartbeatAck:
 			log.Println("Heartbeat acknowledged!")
 		case opDispatch:
-			client.gateway.sequence = payload.SequenceNum
+			client.Gateway.sequence = payload.SequenceNum
 			log.Printf("Received event: %s", *payload.EventName)
 			if payload.Data != nil {
 				log.Printf(string(*payload.Data))
@@ -192,7 +230,7 @@ func handleGatewayRead(conn *websocket.Conn, client *Client, done chan<- error) 
 }
 
 func (client *Client) fetchGatewayUrl(attempts int) error {
-	client.gateway.gatewayUrl = "" // Clear just in case
+	client.Gateway.url = "" // Just in case
 
 	resp, err := client.Get(getGatewayUrl, attempts)
 	if err != nil {
@@ -208,21 +246,12 @@ func (client *Client) fetchGatewayUrl(attempts int) error {
 	if err = json.Unmarshal(body, &data); err != nil {
 		return err
 	}
-	client.gateway.gatewayUrl = data.Url + "/?v=" + apiVersion + "&encoding=" + apiEncoding
-	if client.gateway.gatewayUrl == "" {
+	client.Gateway.url = data.Url + "/?v=" + apiVersion + "&encoding=" + apiEncoding
+	if client.Gateway.url == "" {
 		return errors.New("could not fetch gateway url. this is probably an issue on discord's end")
 	}
 
 	return nil
-}
-
-// decodeGatewayPayload takes a JSON encoded []byte and decodes it into a GatewayPayload
-func decodeGatewayPayload(encoded []byte) (*GatewayPayload, error) {
-	var payload GatewayPayload
-	if err := json.Unmarshal(encoded, &payload); err != nil {
-		return nil, err
-	}
-	return &payload, nil
 }
 
 // readKnownGatewayEvent waits for a websocket message and decodes it into a known type. Should only be used when the
@@ -232,8 +261,8 @@ func readKnownGatewayEvent(conn *websocket.Conn, event any) error {
 	if err != nil {
 		return err
 	}
-	payload, err := decodeGatewayPayload(msg)
-	if err != nil {
+	var payload GatewayPayload
+	if err = json.Unmarshal(msg, &payload); err != nil {
 		return err
 	}
 	if err = json.Unmarshal(*payload.Data, event); err != nil {

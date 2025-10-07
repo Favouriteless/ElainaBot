@@ -14,7 +14,7 @@ const (
 	opRequestSoundboard = 31
 )
 
-type Event interface {
+type GatewayEvent interface {
 	Type() string
 }
 
