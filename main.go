@@ -2,21 +2,26 @@ package main
 
 import (
 	"ElainaBot/discord"
-	"fmt"
 	"log"
-	"time"
 )
 
+const intents = discord.IGuildMessages | discord.IMessageContent
+
 func main() {
-	client, err := discord.CreateClient("ElainaBot", time.Second*5)
+	client, err := discord.CreateClient("ElainaBot", intents)
 	if err != nil {
 		log.Fatal(err)
 	}
+	registerEvents(&client.Events)
 
-	err = client.StartGatewaySession()
-	if err != nil {
+	if err = client.ConnectGateway(); err != nil {
 		log.Fatal(err)
 	}
+	select {}
+}
 
-	fmt.Println("Passed initialisation")
+func registerEvents(dispatch *discord.EventDispatcher) {
+	dispatch.CreateMessage.Register(func(payload discord.CreateMessagePayload) {
+		log.Println(payload.Content)
+	})
 }

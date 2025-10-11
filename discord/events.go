@@ -1,5 +1,10 @@
 package discord
 
+import (
+	"encoding/json"
+	"log"
+)
+
 const ( // Payload Opcodes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
 	opDispatch          = 0  // Receive
 	opHeartbeat         = 1  // Bidirectional
@@ -15,53 +20,55 @@ const ( // Payload Opcodes as specified by https://discord.com/developers/docs/t
 	opRequestSoundboard = 31 // Send
 )
 
-// GatewayEvent represents any dispatch (opcode 0) event received or sent via gateway.
+// GatewayEvent represents a discord gateway event with a name associated with it (HELLO, IDENTIFY and RESUME are not named)
 type GatewayEvent interface {
-	Name() string     // String name of the event this type refers to https://discord.com/developers/docs/events/gateway-events#payload-structure
-	New() interface{} // Returns a new instance of the event type, this will be passed to json.Unmarshal and later handled.
+	Name() string // String name of the event this type refers to https://discord.com/developers/docs/events/gateway-events#payload-structure
 }
 
-// GatewayEventHandler represents a handler for a GatewayEvent. Events may have multiple handlers, which are run in
-// sequence, but only one instance of the event type will be created for each event received.
-type GatewayEventHandler interface {
-	Name() string                // String name of the event this type refers to https://discord.com/developers/docs/events/gateway-events#payload-structure
-	Handle(*Client, interface{}) // Handler function for the event type.
+// GatewayEventType represents a deserialisation and handler dispatcher for a type of GatewayEvent
+type GatewayEventType[T GatewayEvent] struct {
+	Default  T // Default instance of the event payload to deserialize into a copy of
+	handlers []func(T)
 }
 
-// Hello is a non-standard event, it doesn't have a type. Opcode 1 instead
-type Hello struct {
-	HeartbeatInterval int `json:"heartbeat_interval"`
+func (event *GatewayEventType[T]) Name() string {
+	return event.Default.Name()
 }
 
-// Identify is a non-standard event, it doesn't have a type. Opcode 2 instead
-type Identify struct {
-	Token      string               `json:"token"`
-	Properties ConnectionProperties `json:"properties"`
-	Intents    int                  `json:"intents"`
+// Register an event handler to be run when an event of this type is received by the gateway. Multiple handlers can be
+// registered for a single type.
+func (event *GatewayEventType[T]) Register(handler func(T)) {
+	event.handlers = append(event.handlers, handler)
 }
 
-// Resume is a non-standard event, it doesn't have a type. Opcode 6 instead
-type Resume struct {
-	Token       string `json:"token"`
-	SessionId   string `json:"session_id"`
-	SequenceNum int    `json:"seq"`
+func (event *GatewayEventType[T]) dispatch(raw []byte) {
+	data := event.Default // Creates a shallow copy
+	if err := json.Unmarshal(raw, &data); err != nil {
+		log.Printf("Failed to dispatch gateway event: %s", err)
+		return
+	}
+	for _, handler := range event.handlers {
+		handler(data)
+	}
 }
 
-// Ready is sent by discord after the client has successfully identified itself and is ready to receive events. Ready
-// also has a built-in handler for fetching the gateway resume details.
-type Ready struct {
-	ApiVersion       int         `json:"v"`
-	User             User        `json:"user"`
-	Guilds           []Guild     `json:"guilds"`
-	SessionId        string      `json:"session_id"`
-	ResumeGatewayUrl string      `json:"resume_gateway_url"`
-	Application      Application `json:"application"`
+type EventDispatcher struct {
+	Ready         GatewayEventType[ReadyPayload]
+	CreateMessage GatewayEventType[CreateMessagePayload]
 }
 
-func (r Ready) Name() string {
-	return "READY"
+func defaultEvents() EventDispatcher {
+	return EventDispatcher{
+		Ready:         GatewayEventType[ReadyPayload]{Default: ReadyPayload{}},
+		CreateMessage: GatewayEventType[CreateMessagePayload]{Default: CreateMessagePayload{}},
+	}
 }
 
-func (r Ready) New() interface{} {
-	return Ready{}
+func (d *EventDispatcher) dispatchEvent(name string, raw []byte) {
+	switch name { // TODO: Fill in remaining event handlers as needed
+	case d.Ready.Name():
+		d.Ready.dispatch(raw)
+	case d.CreateMessage.Name():
+		d.CreateMessage.dispatch(raw)
+	}
 }

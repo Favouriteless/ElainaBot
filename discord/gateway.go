@@ -3,8 +3,10 @@ package discord
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -31,10 +33,13 @@ type Gateway struct {
 	writersBlock  chan bool // writersBlock will stop the websocket writer routine. Don't access this directly.
 	cardiacArrest chan bool // cardiacArrest will make the client stop sending heartbeats. Don't access this directly.
 
-	url       string // URL for connecting to Discord's Gateway API
-	resumeUrl string // URL for resuming a gateway connection
-	sessionId string // ID of gateway session, only applicable if resuming
-	sequence  *int   // The last sequence number the client received from gateway
+	intents int // Gateway intents the bot will be using https://discord.com/developers/docs/events/gateway#gateway-intents
+
+	url        string // URL for connecting to Discord's Gateway API
+	resumeUrl  string // URL for resuming a gateway connection
+	sessionId  string // ID of gateway session, only applicable if resuming
+	sequence   *int   // The last sequence number the client received from gateway
+	sequenceMu sync.Mutex
 
 	heartbeatAcknowledged bool // Set to false when the client sends a heartbeat. If discord doesn't acknowledge before the next heartbeat, we reconnect. No mutex needed as booleans don't tear and there's a large interval
 }
@@ -70,6 +75,8 @@ func (gateway *Gateway) SendEvent(event *GatewayEvent) error {
 	if err != nil {
 		return err
 	}
+	gateway.sequenceMu.Lock()
+	defer gateway.sequenceMu.Unlock()
 	return gateway.SendPayload(&GatewayPayload{
 		Opcode:      0,
 		Data:        (*json.RawMessage)(&enc),
@@ -91,9 +98,6 @@ func (client *Client) CloseGateway() {
 
 // handleClosed handles cleanup of background tasks after the websocket connection was closed by discord.
 func (client *Client) handleClosed(code int) error {
-	// Response following https://www.rfc-editor.org/rfc/rfc6455.html#section-1.4
-	_ = client.Gateway.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, ""), time.Now().Add(time.Second))
-
 	client.Gateway.cardiacArrest <- true
 	client.Gateway.writersBlock <- true
 	client.Gateway.conn = nil
@@ -101,7 +105,7 @@ func (client *Client) handleClosed(code int) error {
 	log.Printf("Discord closed the gateway connection: %v", code)
 
 	switch code {
-	case closeUnknownError:
+	case closeUnknownError: // Don't really like this but what else can you do
 		client.ReconnectGateway(true)
 	case closeNotAuthenticated:
 		client.ReconnectGateway(false)
@@ -126,7 +130,11 @@ func (client *Client) handleClosed(code int) error {
 // 2.) Wait for Discord's hello payload
 // 3.) Start background tasks (writer, reader, heartbeat)
 // 4.) Send IDENTIFY or RESUME
-func (client *Client) ConnectGateway(resume bool) (err error) {
+func (client *Client) ConnectGateway() error {
+	return client.connectGateway(false)
+}
+
+func (client *Client) connectGateway(resume bool) (err error) {
 	gateway := client.Gateway
 	if gateway.conn != nil {
 		return nil // Already connected, do nothing
@@ -163,6 +171,9 @@ func (client *Client) ConnectGateway(resume bool) (err error) {
 	// First payload sent by discord should be a HELLO https://discord.com/developers/docs/events/gateway#connection-lifecycle
 	// UPDATE: It can also in some instances be INVALID SESSION (thanks discord, very glad you documented this (you didn't) )
 	payload, err := readPayload(gateway.conn)
+	if err != nil {
+		return err
+	}
 
 	if payload.Opcode == opInvalidSession {
 		var reResume bool
@@ -171,10 +182,11 @@ func (client *Client) ConnectGateway(resume bool) (err error) {
 		return errors.New("discord invalidated the session")
 	}
 
-	var hello Hello
+	var hello HelloPayload
 	if err = json.Unmarshal(*payload.Data, &hello); err != nil {
 		return err
 	}
+	client.heartbeat() // Send initial hello heartbeat
 
 	// Start background tasks for websockets
 	gateway.cardiacArrest = make(chan bool)
@@ -184,11 +196,11 @@ func (client *Client) ConnectGateway(resume bool) (err error) {
 	go handleWriting(gateway.conn, gateway.sendBuffer, gateway.writersBlock)
 	go handleReading(gateway.conn, client)
 
-	log.Println("Gateway connection established")
-
 	// Send IDENTIFY or RESUME handshake. The result of these will be handled by handleReading
 	if resume {
-		id, err := json.Marshal(Resume{Token: client.Token, SessionId: gateway.sessionId, SequenceNum: *gateway.sequence})
+		gateway.sequenceMu.Lock()
+		id, err := json.Marshal(ResumePayload{Token: client.Token, SessionId: gateway.sessionId, SequenceNum: *gateway.sequence})
+		gateway.sequenceMu.Unlock()
 		if err != nil {
 			panic(err) // Should never be hit
 		}
@@ -197,19 +209,21 @@ func (client *Client) ConnectGateway(resume bool) (err error) {
 		}
 		log.Println("Sending resume...")
 	} else {
-		id, err := json.Marshal(Identify{
+		res, err := json.Marshal(IdentifyPayload{
 			Token:      client.Token,
 			Properties: ConnectionProperties{Os: "windows", Browser: client.Name, Device: client.Name},
-			Intents:    0,
+			Intents:    gateway.intents,
 		})
 		if err != nil {
 			panic(err) // Should never be hit
 		}
-		if err = gateway.SendPayload(&GatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&id)}); err != nil {
+		if err = gateway.SendPayload(&GatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&res)}); err != nil {
 			panic(err) // Should never be hit
 		}
 		log.Println("Sending identify...")
 	}
+
+	log.Println("Gateway connection established")
 	return nil
 }
 
@@ -220,10 +234,10 @@ func (client *Client) ReconnectGateway(resume bool) {
 	if client.Gateway.conn != nil {
 		client.CloseGateway()
 	}
-	if err := client.ConnectGateway(resume); err == nil {
+	if err := client.connectGateway(resume); err == nil {
 		return
 	}
-	_ = client.ConnectGateway(false)
+	_ = client.connectGateway(false)
 }
 
 func (client *Client) startBeating(interval time.Duration) {
@@ -235,19 +249,19 @@ func (client *Client) startBeating(interval time.Duration) {
 		case <-client.Gateway.cardiacArrest:
 			return
 		default:
-			client.heartbeat()
 			time.Sleep(interval)
+			if !client.Gateway.heartbeatAcknowledged { // If not acknowledged, assume the connection is dead & reconnect
+				client.ReconnectGateway(true)
+			} else {
+				client.heartbeat()
+			}
 		}
 	}
 }
 
 func (client *Client) heartbeat() {
-	if !client.Gateway.heartbeatAcknowledged { // If not acknowledged, assume the connection is dead & reconnect
-		client.ReconnectGateway(true)
-		return
-	}
-
 	payload := GatewayPayload{Opcode: opHeartbeat, Data: nil}
+	client.Gateway.sequenceMu.Lock()
 	if client.Gateway.sequence != nil {
 		if d, err := json.Marshal(*(client.Gateway.sequence)); err == nil {
 			payload.Data = (*json.RawMessage)(&d)
@@ -255,6 +269,7 @@ func (client *Client) heartbeat() {
 			panic(err) // Should never be hit
 		}
 	}
+	client.Gateway.sequenceMu.Unlock()
 	if err := client.Gateway.SendPayload(&payload); err != nil {
 		return
 	}
@@ -265,14 +280,13 @@ func (client *Client) heartbeat() {
 // handleWriting reads any payloads in a channel and writes them to a websocket connection. This ensures that only
 // one goroutine is ever writing to the connection.
 func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan bool) {
-	for { // Do not make a method-- we don't want this to ever lose the references to it's args
+	for {
 		select {
 		case <-stop:
 			return
 		case payload := <-payloads:
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-				log.Printf("Failed to write to gateway websocket: %s", err)
-				return // This should never be hit, but just in case
+				log.Printf("Failed to write to gateway websocket: %s", err) // This should never be hit, but just in case
 			}
 		}
 	}
@@ -281,7 +295,8 @@ func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan boo
 // handleReading reads all payloads from a websocket connection and delegates their handling to relevant functions.
 // No stop flag is needed as the connection will return an error when it closes anyway.
 func handleReading(conn *websocket.Conn, client *Client) {
-	for { // Do not make a method-- we don't want this to ever lose the references to it's args
+	gateway := client.Gateway
+	for {
 		payload, err := readPayload(conn)
 		if err != nil {
 			log.Printf("Failed to read gateway message: %s", err)
@@ -290,11 +305,11 @@ func handleReading(conn *websocket.Conn, client *Client) {
 
 		switch payload.Opcode {
 		case opDispatch:
-			client.Gateway.sequence = payload.SequenceNum // TODO: Event handlers. ESPECIALLY READY BECAUSE WE CANT RESUME WITHOUT IT
 			log.Printf("Received event: %s", *payload.EventName)
-			if payload.Data != nil {
-				log.Printf(string(*payload.Data))
-			}
+			gateway.sequenceMu.Lock()
+			gateway.sequence = payload.SequenceNum
+			gateway.sequenceMu.Unlock()
+			client.Events.dispatchEvent(*payload.EventName, *payload.Data)
 		case opHeartbeat:
 			log.Println("Discord requested a heartbeat")
 			client.heartbeat()
@@ -304,12 +319,12 @@ func handleReading(conn *websocket.Conn, client *Client) {
 		case opInvalidSession:
 			log.Println("Discord invalidated the session")
 			var resume bool
-			err = json.Unmarshal(*payload.Data, &resume)
+			_ = json.Unmarshal(*payload.Data, &resume) // We want to reconnect regardless, it'll just start a new session instead.
 			client.ReconnectGateway(resume)
 		case opHeartbeatAck:
-			client.Gateway.heartbeatAcknowledged = true
+			gateway.heartbeatAcknowledged = true
 			log.Println("Heartbeat acknowledged")
-		} // HELLO opcode can also be received but is handled by ConnectGateway before the reader is started
+		} // HELLO opcode can also be received but is handled by connectGateway before the reader is started
 	}
 }
 
@@ -328,7 +343,7 @@ func (client *Client) fetchGatewayUrl(attempts int) error {
 	if err = json.Unmarshal(body, &data); err != nil {
 		return err
 	}
-	client.Gateway.url = data.Url + "/?v=" + apiVersion + "&encoding=" + apiEncoding
+	client.Gateway.url = fmt.Sprintf("%s/?v=%s&encoding=%s", data.Url, apiVersion, apiEncoding)
 	if client.Gateway.url == "" {
 		return errors.New("could not fetch gateway url. this is probably an issue on discord's end")
 	}
