@@ -108,7 +108,7 @@ type Message struct {
 	Flags             *int               `json:"flags"`              // Optional
 	MessageReference  []MessageReference `json:"message_reference"`  // Optional
 	MessageSnapshots  []MessageSnapshot  `json:"message_snapshots"`  // Optional
-	ReferencedMessage MessageReference   `json:"referenced_message"` // Optional, Nullable
+	ReferencedMessage *MessageReference  `json:"referenced_message"` // Optional, Nullable
 	// InteractionMetadata
 	// Interaction
 	// Thread
@@ -260,41 +260,41 @@ type MessageCall struct {
 
 // Channel represents https://discord.com/developers/docs/resources/channel#channel-object
 type Channel struct {
-	Id                            Snowflake       `json:"id"`
-	Type                          int             `json:"type"`
-	GuildId                       *Snowflake      `json:"guild_id"`                           // Optional
-	Position                      *int            `json:"position"`                           // Optional
-	PermissionOverwrites          []Overwrite     `json:"permission_overwrites"`              // Optional
-	Name                          string          `json:"name"`                               // Optional, nullable
-	Topic                         string          `json:"topic"`                              // Optional, nullable
-	Nsfw                          *bool           `json:"nsfw"`                               // Optional
-	LastMessageId                 *Snowflake      `json:"last_message_id"`                    // Optional, nullable
-	Bitrate                       *int            `json:"bitrate"`                            // Optional
-	UserLimit                     *int            `json:"user_limit"`                         // Optional
-	RateLimitPerUser              *int            `json:"rate_limit_per_user"`                // Optional
-	Recipients                    []User          `json:"recipients"`                         // Optional
-	Icon                          string          `json:"icon"`                               // Optional, nullable
-	OwnerId                       *Snowflake      `json:"owner_id"`                           // Optional
-	ApplicationId                 *Snowflake      `json:"application_id"`                     // Optional
-	Managed                       *bool           `json:"managed"`                            // Optional
-	ParentId                      *Snowflake      `json:"parent_id"`                          // Optional, nullable
-	LastPinTimestamp              string          `json:"last_pin_timestamp"`                 // Optional, nullable
-	RtcRegion                     *string         `json:"rtc_region"`                         // Optional, nullable
-	VideoQualityMode              int             `json:"video_quality_mode"`                 // Optional
-	MessageCount                  int             `json:"message_count"`                      // Optional
-	MemberCount                   int             `json:"member_count"`                       // Optional
-	ThreadMetadata                ThreadMetadata  `json:"thread_metadata"`                    // Optional
-	Member                        *ThreadMember   `json:"member"`                             // Optional
-	DefaultAutoArchiveDuration    *int            `json:"default_auto_archive_duration"`      // Optional
-	Permissions                   string          `json:"permissions"`                        // Optional
-	Flags                         *int            `json:"flags"`                              // Optional
-	TotalMessageSent              *int            `json:"total_message_sent"`                 // Optional
-	AvailableTags                 []ForumTag      `json:"available_tags"`                     // Optional
-	AppliedTags                   []Snowflake     `json:"applied_tags"`                       // Optional
-	DefaultReaction               DefaultReaction `json:"default_reaction"`                   // Optional, nullable
-	DefaultThreadRateLimitPerUser *int            `json:"default_thread_rate_limit_per_user"` // Optional
-	DefaultSortOrder              *int            `json:"default_sort_order"`                 // Optional
-	DefaultForumLayout            *int            `json:"default_forum_layout"`               // Optional
+	Id                            Snowflake        `json:"id"`
+	Type                          int              `json:"type"`
+	GuildId                       *Snowflake       `json:"guild_id"`                           // Optional
+	Position                      *int             `json:"position"`                           // Optional
+	PermissionOverwrites          []Overwrite      `json:"permission_overwrites"`              // Optional
+	Name                          string           `json:"name"`                               // Optional, nullable
+	Topic                         string           `json:"topic"`                              // Optional, nullable
+	Nsfw                          *bool            `json:"nsfw"`                               // Optional
+	LastMessageId                 *Snowflake       `json:"last_message_id"`                    // Optional, nullable
+	Bitrate                       *int             `json:"bitrate"`                            // Optional
+	UserLimit                     *int             `json:"user_limit"`                         // Optional
+	RateLimitPerUser              *int             `json:"rate_limit_per_user"`                // Optional
+	Recipients                    []User           `json:"recipients"`                         // Optional
+	Icon                          string           `json:"icon"`                               // Optional, nullable
+	OwnerId                       *Snowflake       `json:"owner_id"`                           // Optional
+	ApplicationId                 *Snowflake       `json:"application_id"`                     // Optional
+	Managed                       *bool            `json:"managed"`                            // Optional
+	ParentId                      *Snowflake       `json:"parent_id"`                          // Optional, nullable
+	LastPinTimestamp              string           `json:"last_pin_timestamp"`                 // Optional, nullable
+	RtcRegion                     *string          `json:"rtc_region"`                         // Optional, nullable
+	VideoQualityMode              int              `json:"video_quality_mode"`                 // Optional
+	MessageCount                  int              `json:"message_count"`                      // Optional
+	MemberCount                   int              `json:"member_count"`                       // Optional
+	ThreadMetadata                *ThreadMetadata  `json:"thread_metadata"`                    // Optional
+	Member                        *ThreadMember    `json:"member"`                             // Optional
+	DefaultAutoArchiveDuration    *int             `json:"default_auto_archive_duration"`      // Optional
+	Permissions                   string           `json:"permissions"`                        // Optional
+	Flags                         *int             `json:"flags"`                              // Optional
+	TotalMessageSent              *int             `json:"total_message_sent"`                 // Optional
+	AvailableTags                 []ForumTag       `json:"available_tags"`                     // Optional
+	AppliedTags                   []Snowflake      `json:"applied_tags"`                       // Optional
+	DefaultReaction               *DefaultReaction `json:"default_reaction"`                   // Optional, nullable
+	DefaultThreadRateLimitPerUser *int             `json:"default_thread_rate_limit_per_user"` // Optional
+	DefaultSortOrder              *int             `json:"default_sort_order"`                 // Optional
+	DefaultForumLayout            *int             `json:"default_forum_layout"`               // Optional
 }
 
 // Overwrite represents https://discord.com/developers/docs/resources/channel#overwrite-object

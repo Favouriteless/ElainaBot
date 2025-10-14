@@ -20,19 +20,10 @@ const ( // Payload Opcodes as specified by https://discord.com/developers/docs/t
 	opRequestSoundboard = 31 // Send
 )
 
-// GatewayEvent represents a discord gateway event with a name associated with it (HELLO, IDENTIFY and RESUME are not named)
-type GatewayEvent interface {
-	Name() string // String name of the event this type refers to https://discord.com/developers/docs/events/gateway-events#payload-structure
-}
-
 // GatewayEventType represents a deserialisation and handler dispatcher for a type of GatewayEvent
-type GatewayEventType[T GatewayEvent] struct {
-	Default  T // Default instance of the event payload to deserialize into a copy of
+type GatewayEventType[T any] struct {
+	Name     string
 	handlers []func(T)
-}
-
-func (event *GatewayEventType[T]) Name() string {
-	return event.Default.Name()
 }
 
 // Register an event handler to be run when an event of this type is received by the gateway. Multiple handlers can be
@@ -41,8 +32,9 @@ func (event *GatewayEventType[T]) Register(handler func(T)) {
 	event.handlers = append(event.handlers, handler)
 }
 
+// dispatch decodes the given json-encoded []byte and dispatches it as an event
 func (event *GatewayEventType[T]) dispatch(raw []byte) {
-	data := event.Default // Creates a shallow copy
+	var data T
 	if err := json.Unmarshal(raw, &data); err != nil {
 		log.Printf("Failed to dispatch gateway event: %s", err)
 		return
@@ -53,22 +45,44 @@ func (event *GatewayEventType[T]) dispatch(raw []byte) {
 }
 
 type EventDispatcher struct {
-	Ready         GatewayEventType[ReadyPayload]
-	CreateMessage GatewayEventType[CreateMessagePayload]
+	Ready             GatewayEventType[ReadyPayload]
+	CreateMessage     GatewayEventType[CreateMessagePayload]
+	UpdateMessage     GatewayEventType[UpdateMessagePayload]
+	DeleteMessage     GatewayEventType[DeleteMessagePayload]
+	BulkDeleteMessage GatewayEventType[BulkDeleteMessagePayload]
+	ReactionAdd       GatewayEventType[ReactionAddPayload]
+	ReactionRemove    GatewayEventType[ReactionRemovePayload]
 }
 
 func defaultEvents() EventDispatcher {
-	return EventDispatcher{
-		Ready:         GatewayEventType[ReadyPayload]{Default: ReadyPayload{}},
-		CreateMessage: GatewayEventType[CreateMessagePayload]{Default: CreateMessagePayload{}},
+	return EventDispatcher{ // Do not use explicit names here, we want the compiler to complain if an event is missing
+		GatewayEventType[ReadyPayload]{Name: "READY"},
+		GatewayEventType[CreateMessagePayload]{Name: "MESSAGE_CREATE"},
+		GatewayEventType[UpdateMessagePayload]{Name: "MESSAGE_UPDATE"},
+		GatewayEventType[DeleteMessagePayload]{Name: "MESSAGE_DELETE"},
+		GatewayEventType[BulkDeleteMessagePayload]{Name: "MESSAGE_DELETE_BULK"},
+		GatewayEventType[ReactionAddPayload]{Name: "MESSAGE_REACTION_ADD"},
+		GatewayEventType[ReactionRemovePayload]{Name: "MESSAGE_REACTION_REMOVE"},
 	}
 }
 
+// Not really a fan of how this is implemented, but I couldn't figure out how to maintain type safety during event handler
+// registration without doing this.
 func (d *EventDispatcher) dispatchEvent(name string, raw []byte) {
 	switch name { // TODO: Fill in remaining event handlers as needed
-	case d.Ready.Name():
+	case d.Ready.Name:
 		d.Ready.dispatch(raw)
-	case d.CreateMessage.Name():
+	case d.CreateMessage.Name:
 		d.CreateMessage.dispatch(raw)
+	case d.UpdateMessage.Name:
+		d.UpdateMessage.dispatch(raw)
+	case d.DeleteMessage.Name:
+		d.DeleteMessage.dispatch(raw)
+	case d.BulkDeleteMessage.Name:
+		d.BulkDeleteMessage.dispatch(raw)
+	case d.ReactionAdd.Name:
+		d.ReactionAdd.dispatch(raw)
+	case d.ReactionRemove.Name:
+		d.ReactionRemove.dispatch(raw)
 	}
 }

@@ -67,24 +67,6 @@ func (gateway *Gateway) SendPayload(payload *GatewayPayload) error {
 	return nil
 }
 
-// SendEvent sends the given GatewayEvent on the websocket connection if one is open, or errors if there is no valid
-// connection or the event/payload fails to encode
-func (gateway *Gateway) SendEvent(event *GatewayEvent) error {
-	t := (*event).Name()
-	enc, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-	gateway.sequenceMu.Lock()
-	defer gateway.sequenceMu.Unlock()
-	return gateway.SendPayload(&GatewayPayload{
-		Opcode:      0,
-		Data:        (*json.RawMessage)(&enc),
-		SequenceNum: gateway.sequence,
-		EventName:   &t,
-	})
-}
-
 // CloseGateway closes the active gateway websocket and handles cleanup of background tasks.
 func (client *Client) CloseGateway() {
 	gateway := client.Gateway
