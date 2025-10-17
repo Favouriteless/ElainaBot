@@ -1,6 +1,10 @@
 package discord
 
-import "net/http"
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+)
 
 // SendHttpAuth signs the provided HTTP request with the client's auth headers and forwards it to SendHttp
 func (client *Client) SendHttpAuth(req *http.Request, attempts int) (*http.Response, error) {
@@ -28,11 +32,33 @@ func (client *Client) setAuthHeaders(req *http.Request) *http.Request {
 	return req
 }
 
-// Get sends an HTTP get request to the given URL signed with the bot's authorization token
-func (client *Client) Get(url string, attempts int) (resp *http.Response, err error) {
+// Get sends an HTTP GET request to the given URL signed with the bot's authorization token
+func (client *Client) Get(url string, attempts int) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	return client.SendHttpAuth(req, attempts)
+}
+
+// PostJson sends an HTTP POST request to the given URL signed with the bot's authorization token
+func (client *Client) PostJson(url string, body []byte, attempts int) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return client.SendHttpAuth(req, attempts)
+}
+
+func (client *Client) CreateOrUpdateApplicationCommand(command *ApplicationCommand, attempts int) (*http.Response, error) {
+	enc, err := json.Marshal(command)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.PostJson(apiUrl+"/applications/"+client.Id+"/commands", enc, attempts)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }

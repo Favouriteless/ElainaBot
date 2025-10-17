@@ -11,40 +11,16 @@ const apiVersion = "10"
 const apiEncoding = "json"
 const apiUrl = "https://discord.com/api/v" + apiVersion
 
-const ( // All gateway intent bits expressed as constants. These can be ORed
-	IGuilds                 = 1 << 0
-	IGuildMembers           = 1 << 1
-	IGuildModeration        = 1 << 2
-	IGuildExpressions       = 1 << 3
-	IGuildIntegrations      = 1 << 4
-	IGuildWebhooks          = 1 << 5
-	IGuildInvites           = 1 << 6
-	IGuildVoiceStates       = 1 << 7
-	IGuildPresences         = 1 << 8
-	IGuildMessages          = 1 << 9
-	IGuildMessageReactions  = 1 << 10
-	IGuildMessageTyping     = 1 << 11
-	IDirectMessages         = 1 << 12
-	IDirectMessageReactions = 1 << 13
-	IDirectMessageTyping    = 1 << 14
-	IMessageContent         = 1 << 15
-	IGuildScheduledEvents   = 1 << 16
-	IAutoModConfig          = 1 << 20
-	IAutoModExec            = 1 << 21
-	IGuildMessagePolls      = 1 << 24
-	IDirectMessagePolls     = 1 << 25
-)
-
 // Client represents the auth and session details of the discord client, all methods interfacing with Discord API will
 // require a client.
 type Client struct {
-	Name   string       // Name of the discord bot
-	Http   *http.Client // HTTP client used for interacting with Discord's REST API
-	Id     string       // Client ID
-	Secret string       // Client Secret
-	Token  string       // Bot token
+	Name   string      // Name of the discord bot
+	Http   http.Client // HTTP client used for interacting with Discord's REST API
+	Id     string      // Client ID
+	Secret string      // Client Secret
+	Token  string      // Bot token
 
-	Gateway *Gateway // Gateway connection information. Most clients should not directly interact with this.
+	Gateway Gateway // Gateway connection information. Most clients should not directly interact with this.
 	Events  EventDispatcher
 }
 
@@ -79,8 +55,8 @@ func loadClient(name string, intents int) (*Client, error) {
 
 	client := Client{
 		Name: name,
-		Http: &http.Client{Timeout: time.Second * 10},
-		Gateway: &Gateway{
+		Http: http.Client{Timeout: time.Second * 10},
+		Gateway: Gateway{
 			sendBuffer: make(chan []byte, 10), // Arbitrary capacity to prevent blocking.
 			intents:    intents,
 		},
