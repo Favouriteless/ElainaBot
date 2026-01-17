@@ -34,6 +34,9 @@ func (event *GatewayEventType[T]) Register(handler func(T)) {
 
 // dispatch decodes the given json-encoded []byte and dispatches it as an event
 func (event *GatewayEventType[T]) dispatch(raw []byte) {
+	if len(event.handlers) == 0 {
+		return
+	}
 	var data T
 	if err := json.Unmarshal(raw, &data); err != nil {
 		log.Printf("Failed to dispatch gateway event: %s", err)
@@ -52,6 +55,7 @@ type EventDispatcher struct {
 	BulkDeleteMessage GatewayEventType[BulkDeleteMessagePayload]
 	ReactionAdd       GatewayEventType[ReactionAddPayload]
 	ReactionRemove    GatewayEventType[ReactionRemovePayload]
+	InteractionCreate GatewayEventType[InteractionCreatePayload]
 }
 
 func defaultEvents() EventDispatcher {
@@ -63,6 +67,7 @@ func defaultEvents() EventDispatcher {
 		GatewayEventType[BulkDeleteMessagePayload]{Name: "MESSAGE_DELETE_BULK"},
 		GatewayEventType[ReactionAddPayload]{Name: "MESSAGE_REACTION_ADD"},
 		GatewayEventType[ReactionRemovePayload]{Name: "MESSAGE_REACTION_REMOVE"},
+		GatewayEventType[InteractionCreatePayload]{Name: "INTERACTION_CREATE"},
 	}
 }
 
@@ -84,5 +89,7 @@ func (d *EventDispatcher) dispatchEvent(name string, raw []byte) {
 		d.ReactionAdd.dispatch(raw)
 	case d.ReactionRemove.Name:
 		d.ReactionRemove.dispatch(raw)
+	case d.InteractionCreate.Name:
+		d.InteractionCreate.dispatch(raw)
 	}
 }

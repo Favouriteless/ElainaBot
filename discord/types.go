@@ -1,5 +1,7 @@
 package discord
 
+import "encoding/json"
+
 // Snowflake is the identifier type used by discord. It is structured as specified by
 // https://discord.com/developers/docs/reference#snowflakes
 type Snowflake = string
@@ -355,4 +357,25 @@ type ThreadMetadata struct {
 	Locked              bool   `json:"locked"`
 	Invitable           *bool  `json:"invitable"`        // Optional
 	CreateTimestamp     string `json:"create_timestamp"` // Optional, nullable
+}
+
+// Interaction represents https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object
+type Interaction struct {
+	Id                  Snowflake        `json:"id"`
+	ApplicationId       Snowflake        `json:"application_id"`
+	Type                int              `json:"type"` // 1 = PING, 2 = APPLICATION_COMMAND, 3 = MESSAGE_COMPONENT, 4 = APPLICATION_COMMAND_AUTOCOMPLETE, 5 = MODAL_SUBMIT
+	Data                *json.RawMessage `json:"data"` // Always present on application Commands, message components & model submit. Optional for future proofing.
+	Guild               *Guild           `json:"guild"`
+	GuildId             *Snowflake       `json:"guild_id"`
+	Channel             *Channel         `json:"channel"`
+	ChannelId           *Snowflake       `json:"channel_id"`
+	Member              *GuildMember     `json:"member"`
+	User                *User            `json:"user"`
+	Token               string           `json:"token"` // Continuation token
+	Message             *Message         `json:"message"`
+	AppPermissions      string           `json:"app_permissions"`
+	Locale              string           `json:"locale"`
+	GuildLocale         string           `json:"guild_locale"`
+	Context             *int             `json:"context"` // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
+	AttachmentSizeLimit int              `json:"attachment_size_limit"`
 }

@@ -99,3 +99,6 @@ type ReactionRemovePayload struct {
 	Burst     bool       `json:"burst"`
 	Type      int        `json:"type"`
 }
+
+// InteractionCreatePayload is sent by discord when a user creates an interaction (e.g. via a slash command)
+type InteractionCreatePayload = Interaction

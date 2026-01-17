@@ -27,8 +27,8 @@ const (
 
 // Gateway stores a Client's gateway connection details
 type Gateway struct {
-	conn       *websocket.Conn // Websocket connection for the client. This may be nil at times, always use the sendBuffer where applicable.
-	sendBuffer chan []byte     // Thread-safe buffer for writing packets to a websocket connection, it also prevents losing payloads when reconnecting.
+	conn      *websocket.Conn // Websocket connection for the client. This may be nil at times, always use the sendQueue where applicable.
+	sendQueue chan []byte     // Thread-safe buffer for writing to the websocket connection, it also prevents losing payloads when reconnecting.
 
 	writersBlock  chan bool // writersBlock will stop the websocket writer routine. Don't access this directly.
 	cardiacArrest chan bool // cardiacArrest will make the client stop sending heartbeats. Don't access this directly.
@@ -56,29 +56,33 @@ type GatewayPayload struct {
 // SendPayload sends the given GatewayPayload on the websocket connection if one is open, or errors if there is no valid
 // connection or the payload fails to encode
 func (gateway *Gateway) SendPayload(payload *GatewayPayload) error {
-	if gateway.sendBuffer == nil || gateway.conn == nil {
+	if gateway.sendQueue == nil || gateway.conn == nil {
 		return errors.New("cannot send a gateway payload without a valid connection being open")
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	gateway.sendBuffer <- encoded
+	gateway.sendQueue <- encoded
 	return nil
 }
 
-// CloseGateway closes the active gateway websocket and handles cleanup of background tasks.
+// CloseGateway closes the active gateway websocket and handles clean-up of background tasks.
 func (client *Client) CloseGateway() {
 	if client.Gateway.conn != nil {
 		client.Gateway.conn.Close()
 	}
-	client.Gateway.cardiacArrest <- true
-	client.Gateway.writersBlock <- true // Make sure we stop trying to write to the socket. Reader will stop itself.
+	if client.Gateway.cardiacArrest != nil {
+		client.Gateway.cardiacArrest <- true
+	}
+	if client.Gateway.writersBlock != nil {
+		client.Gateway.writersBlock <- true // Make sure we stop trying to write to the socket. Reader will stop itself.
+	}
 	client.Gateway.conn = nil
 }
 
-// handleClosed handles cleanup of background tasks after the websocket connection was closed by discord.
-func (client *Client) handleClosed(code int) error {
+// handleClosed handles clean-up of background tasks after the websocket connection was closed by discord.
+func (client *Client) handleClosed(code int) (err error) {
 	client.Gateway.cardiacArrest <- true
 	client.Gateway.writersBlock <- true
 	client.Gateway.conn = nil
@@ -87,27 +91,28 @@ func (client *Client) handleClosed(code int) error {
 
 	switch code {
 	case closeUnknownError: // Don't really like this but what else can you do
-		client.ReconnectGateway(true)
+		err = client.reconnectGateway(true)
 	case closeNotAuthenticated:
-		client.ReconnectGateway(false)
+		err = client.reconnectGateway(false)
 	case closeAuthenticationFailed:
-		client.ReconnectGateway(false)
+		err = client.reconnectGateway(false)
 	case closeInvalidSequence:
-		client.ReconnectGateway(false)
+		err = client.reconnectGateway(false)
 	case closeRateLimited:
-		client.ReconnectGateway(true)
+		err = client.reconnectGateway(true)
 	case closeTimedOut:
-		client.ReconnectGateway(false)
+		err = client.reconnectGateway(false)
 	}
 
-	return nil
+	return
 }
 
-// ConnectGateway attempts to initiate a websocket connection with Discord's Gateway API (https://discord.com/developers/docs/events/overview)
-// and start listening for events. It will either block until the connection has closed, or return an error when something
-// goes wrong during initialisation.
+// ConnectGateway attempts to initiate a websocket connection with Discord's Gateway API
+// (https://discord.com/developers/docs/events/overview) and start listening for events. It will either block until the
+// handshake is finished, or return an error if something goes wrong.
 //
-// 1.) Send HTTP upgrade request
+// The connection process is as follows:
+// 1.) Open a websocket with discord API
 // 2.) Wait for Discord's hello payload
 // 3.) Start background tasks (writer, reader, heartbeat)
 // 4.) Send IDENTIFY or RESUME
@@ -141,12 +146,12 @@ func (client *Client) connectGateway(resume bool) (err error) {
 		return err
 	}
 
+	client.Gateway.conn.SetCloseHandler(func(code int, text string) error { return client.handleClosed(code) })
 	defer func() { // Ensure we cancel the write/beater routines & disconnect if handshake fails.
 		if err != nil {
 			client.CloseGateway()
 		}
 	}()
-	client.Gateway.conn.SetCloseHandler(func(code int, text string) error { return client.handleClosed(code) })
 
 	// First payload sent by discord should be a HELLO https://discord.com/developers/docs/events/gateway#connection-lifecycle
 	// UPDATE: It can also in some instances be INVALID SESSION (thanks discord, very glad you documented this (you didn't) )
@@ -158,8 +163,8 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	if payload.Opcode == opInvalidSession {
 		var reResume bool
 		err = json.Unmarshal(*payload.Data, &reResume)
-		defer client.ReconnectGateway(reResume) // We don't need to close here as it's already deferred above
-		return errors.New("discord invalidated the session")
+		defer func() { err = client.reconnectGateway(reResume) }() // This runs after the first attempt gets closed.
+		return nil
 	}
 
 	var hello HelloPayload
@@ -169,12 +174,12 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	client.heartbeat() // Send initial hello heartbeat
 
 	// Start background tasks for websockets
-	client.Gateway.cardiacArrest = make(chan bool)
-	client.Gateway.writersBlock = make(chan bool)
+	client.Gateway.cardiacArrest = make(chan bool, 1)
+	client.Gateway.writersBlock = make(chan bool, 1)
 
-	go client.startBeating(time.Millisecond * time.Duration(hello.HeartbeatInterval))
-	go handleWriting(client.Gateway.conn, client.Gateway.sendBuffer, client.Gateway.writersBlock)
-	go handleReading(client.Gateway.conn, client)
+	go client.startBeating(time.Millisecond * time.Duration(hello.HeartbeatInterval))            // cardiacArrest can cancel startBeating
+	go handleWriting(client.Gateway.conn, client.Gateway.sendQueue, client.Gateway.writersBlock) // writersBlock can cancel handleWriting
+	go handleReading(client.Gateway.conn, client)                                                // handleReading is self cancelling
 
 	// Send IDENTIFY or RESUME handshake. The result of these will be handled by handleReading
 	if resume {
@@ -207,17 +212,14 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	return nil
 }
 
-// ReconnectGateway will attempt to restore the client's gateway websocket connection. If resuming, one resume attempt
+// reconnectGateway will attempt to restore the client's gateway websocket connection. If resuming, one resume attempt
 // will be performed, then an identify attempt after. If not, up to two identify attempts will be performed (to account
 // for an outdated url)
-func (client *Client) ReconnectGateway(resume bool) {
-	if client.Gateway.conn != nil {
-		client.CloseGateway()
-	}
+func (client *Client) reconnectGateway(resume bool) error {
 	if err := client.connectGateway(resume); err == nil {
-		return
+		return nil
 	}
-	_ = client.connectGateway(false)
+	return client.connectGateway(false)
 }
 
 func (client *Client) startBeating(interval time.Duration) {
@@ -231,7 +233,10 @@ func (client *Client) startBeating(interval time.Duration) {
 		default:
 			time.Sleep(interval)
 			if !client.Gateway.heartbeatAcknowledged { // If not acknowledged, assume the connection is dead & reconnect
-				client.ReconnectGateway(true)
+				if err := client.reconnectGateway(true); err != nil {
+					log.Printf("failed to reconnect after heartbeat: %s", err)
+					client.CloseGateway()
+				}
 			} else {
 				client.heartbeat()
 			}
@@ -257,8 +262,7 @@ func (client *Client) heartbeat() {
 	log.Println("Sending heartbeat...")
 }
 
-// handleWriting reads any payloads in a channel and writes them to a websocket connection. This ensures that only
-// one goroutine is ever writing to the connection.
+// handleWriting reads any payloads in a channel and writes them to a websocket connection.
 func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan bool) {
 	for {
 		select {
@@ -275,7 +279,7 @@ func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan boo
 // handleReading reads all payloads from a websocket connection and delegates their handling to relevant functions.
 // No stop flag is needed as the connection will return an error when it closes anyway.
 func handleReading(conn *websocket.Conn, client *Client) {
-	for {
+	for { // TODO: Reading thread currently gets blocked by handling the payload.
 		payload, err := readPayload(conn)
 		if err != nil {
 			log.Printf("Failed to read gateway message: %s", err)
@@ -294,12 +298,18 @@ func handleReading(conn *websocket.Conn, client *Client) {
 			client.heartbeat()
 		case opReconnect:
 			log.Println("Discord requested a reconnect")
-			client.ReconnectGateway(true)
+			if err := client.reconnectGateway(true); err != nil {
+				log.Printf("Failed to reconnect: %s", err)
+				client.CloseGateway()
+			}
 		case opInvalidSession:
 			log.Println("Discord invalidated the session")
 			var resume bool
-			_ = json.Unmarshal(*payload.Data, &resume) // We want to reconnect regardless, it'll just start a new session instead.
-			client.ReconnectGateway(resume)
+			_ = json.Unmarshal(*payload.Data, &resume)
+			if err := client.reconnectGateway(resume); err != nil {
+				log.Printf("Failed to reconnect: %s", err)
+				client.CloseGateway()
+			}
 		case opHeartbeatAck:
 			client.Gateway.heartbeatAcknowledged = true
 			log.Println("Heartbeat acknowledged")

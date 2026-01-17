@@ -2,6 +2,8 @@ package discord
 
 import (
 	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -20,8 +22,9 @@ type Client struct {
 	Secret string      // Client Secret
 	Token  string      // Bot token
 
-	Gateway Gateway // Gateway connection information. Most clients should not directly interact with this.
-	Events  EventDispatcher
+	Gateway  Gateway // Gateway connection information. Most clients should not directly interact with this.
+	Events   EventDispatcher
+	Commands []*ApplicationCommand
 }
 
 // CreateClient creates and initialises a discord client and its gateway connection
@@ -38,14 +41,31 @@ func CreateClient(name string, intents int) (*Client, error) {
 
 // initialise is responsible for any post-instantiation setup required for clients
 func (client *Client) initialise() error {
-	client.Events.Ready.Register(func(payload ReadyPayload) {
+	client.Events.Ready.Register(func(payload ReadyPayload) { // Built-in event handler for updating the gateway resume URL and session ID
 		client.Gateway.url = payload.ResumeGatewayUrl
 		client.Gateway.sessionId = payload.SessionId
+	})
+
+	client.Events.InteractionCreate.Register(func(payload InteractionCreatePayload) { // Built-in event handler for dispatching application Commands
+		if payload.Type == 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
+			var c ApplicationCommandData
+			if err := json.Unmarshal(*payload.Data, &c); err != nil {
+				log.Println("Error parsing command:", err)
+				return
+			}
+
+			log.Println("Dispatching command: " + c.Name)
+			for _, command := range client.Commands {
+				if c.Name == command.Name && command.Handler(c) {
+					break
+				}
+			}
+		}
 	})
 	return nil
 }
 
-// loadClient initialises a default Client instance and handles loading bot details from json such as client id, client
+// loadClient initialises a default Client instance and handles loading bot details from JSON such as client id, client
 // secret and bot token
 func loadClient(name string, intents int) (*Client, error) {
 	contents, err := os.ReadFile("data/secrets.json")
@@ -57,8 +77,8 @@ func loadClient(name string, intents int) (*Client, error) {
 		Name: name,
 		Http: http.Client{Timeout: time.Second * 10},
 		Gateway: Gateway{
-			sendBuffer: make(chan []byte, 10), // Arbitrary capacity to prevent blocking.
-			intents:    intents,
+			sendQueue: make(chan []byte, 10), // Arbitrary capacity to prevent blocking.
+			intents:   intents,
 		},
 		Events: defaultEvents(),
 	}
@@ -67,4 +87,45 @@ func loadClient(name string, intents int) (*Client, error) {
 		return nil, err
 	}
 	return &client, err
+}
+
+func (client *Client) DeployCommand(command *ApplicationCommand, attempts int) (*http.Response, error) {
+	enc, err := json.Marshal(command)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Post(apiUrl+"/applications/"+client.Id+"/commands", enc, attempts)
+	return resp, err
+}
+
+func (client *Client) DeleteCommand(command Snowflake) (*http.Response, error) {
+	resp, err := client.Delete(apiUrl+"/applications/"+client.Id+"/commands/"+command, 3)
+	return resp, err
+}
+
+func (client *Client) DeployAllCommands() {
+	for _, com := range client.Commands {
+		func() {
+			resp, err := client.DeployCommand(com, 3)
+			if err != nil {
+				log.Printf("Error registering command \"%s\": %s", com.Name, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			switch resp.StatusCode {
+			case 200:
+				log.Printf("Command \"%s\" already exists, it was updated", com.Name)
+			case 201:
+				log.Printf("Command \"%s\" added successfully", com.Name)
+			default:
+				log.Printf("Command \"%s\" could not be created: %s", com.Name, resp.Status)
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					panic(err) // Should never be hit
+				}
+				log.Println(string(body))
+			}
+		}()
+	}
 }
