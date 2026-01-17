@@ -56,8 +56,8 @@ var defaultErrResponse = InteractionResponse{
 	Data: Message{Content: "An error occurred executing this command :(", Flags: MsgFlagEphemeral},
 }
 
-func (client *Client) handleInteractionCreate(payload InteractionCreatePayload) { // Built-in event handler for dispatching application Commands
-	if payload.Type != 2 {                                                        // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
+func (client *Client) handleInteractionCommands(payload InteractionCreatePayload) { // Built-in event handler for dispatching application Commands
+	if payload.Type != 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
 		return
 	}
 

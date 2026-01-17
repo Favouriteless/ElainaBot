@@ -5,21 +5,6 @@ import (
 	"log/slog"
 )
 
-const ( // Payload Opcodes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
-	opDispatch          = 0  // Receive
-	opHeartbeat         = 1  // Bidirectional
-	opIdentify          = 2  // Send
-	opPresenceUpdate    = 3  // Send
-	opVoiceUpdate       = 4  // Send
-	opResume            = 6  // Send
-	opReconnect         = 7  // Receive
-	opRequestMembers    = 8  // Send
-	opInvalidSession    = 9  // Receive
-	opHello             = 10 // Receive
-	opHeartbeatAck      = 11 // Receive
-	opRequestSoundboard = 31 // Send
-)
-
 // GatewayEventType represents a deserialisation and handler dispatcher for a type of GatewayEvent
 type GatewayEventType[T any] struct {
 	Name     string
@@ -74,7 +59,7 @@ func defaultEvents() EventDispatcher {
 // Not really a fan of how this is implemented, but I couldn't figure out how to maintain type safety during event handler
 // registration without doing this.
 func (d *EventDispatcher) dispatchEvent(name string, raw []byte) {
-	switch name { // TODO: Fill in remaining event handlers as needed
+	switch name {
 	case d.Ready.Name:
 		d.Ready.dispatch(raw)
 	case d.CreateMessage.Name:

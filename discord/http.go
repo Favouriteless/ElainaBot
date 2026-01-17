@@ -52,6 +52,16 @@ func (client *Client) Delete(url string, attempts int) (*http.Response, error) {
 	return client.SendHttpAuth(req, attempts)
 }
 
+// Patch sends an HTTP PATCH request to the given URL signed with the bot's authorisation token
+func (client *Client) Patch(url string, body []byte, attempts int) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return client.SendHttpAuth(req, attempts)
+}
+
 // setAuthHeaders signs the given HTTP request with the client's user agent and auth token
 func (client *Client) setAuthHeaders(req *http.Request) *http.Request {
 	req.Header.Set("User-Agent", "DiscordBot (https://github.com/Favouriteless/ElainaBot, 2.0.0)")

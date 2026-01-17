@@ -2,24 +2,27 @@ package main
 
 import (
 	"ElainaBot/discord"
+	"flag"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 const intents = discord.IntentGuildMessages | discord.IntentMessageContent
 
 func main() {
-	client, err := discord.CreateClient("ElainaBot", intents)
+	id := os.Getenv("ELAINA_CLIENT_ID")
+	secret := os.Getenv("ELAINA_CLIENT_SECRET")
+	token := os.Getenv("ELAINA_TOKEN")
+
+	client, err := discord.CreateClient("ElainaBot", id, secret, token, intents)
 	if err != nil {
 		panic(err)
 	}
 
-	var mode string
-	if len(os.Args) > 1 {
-		mode = os.Args[1]
-	} else {
-		mode = "--bot"
-	}
+	deploy := flag.Bool("deploy_commands", false, "Deploy the bot's application commands")
+	flag.Parse()
 
 	client.Commands = []*discord.ApplicationCommand{
 		{
@@ -42,10 +45,9 @@ func main() {
 		},
 	}
 
-	slog.Info("Running as: " + mode)
-	switch mode {
-	case "--bot":
-
+	if *deploy {
+		client.DeployAllCommands()
+	} else {
 		client.Events.CreateMessage.Register(func(payload discord.CreateMessagePayload) {
 			slog.Info("Message received:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
 		})
@@ -53,9 +55,13 @@ func main() {
 		if err = client.ConnectGateway(); err != nil {
 			panic(err)
 		}
-		select { // Infinite select for now, this will handle CLI inputs in a real application
-		}
-	case "--deploy_commands":
-		client.DeployAllCommands()
+
+		// Wait for a SIGINT or SIGTERM signal to gracefully shut down
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+
+		slog.Info("Shutting down...")
+		client.CloseGateway()
 	}
 }

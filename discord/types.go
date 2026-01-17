@@ -6,23 +6,6 @@ import "encoding/json"
 // https://discord.com/developers/docs/reference#snowflakes
 type Snowflake = string
 
-// https://discord.com/developers/docs/resources/message#message-object-message-flags
-const (
-	MsgFlagCrossposted                  = 1 << 0
-	MsgFlagIsCrosspost                  = 1 << 1
-	MsgFlagSuppressEmbeds               = 1 << 2
-	MsgFlagSourceDeleted                = 1 << 3
-	MsgFlagUrgent                       = 1 << 4
-	MsgFlagHasThread                    = 1 << 5
-	MsgFlagEphemeral                    = 1 << 6
-	MsgFlagLoading                      = 1 << 7
-	MsgFlagFailedToMentionRolesInThread = 1 << 8
-	MsgFlagSuppressNotifications        = 1 << 9
-	MsgFlagIsVoiceMsg                   = 1 << 10
-	MsgFlagHasSnapshot                  = 1 << 11
-	MsgFlagIsComponentsV2               = 1 << 12
-)
-
 type ConnectionProperties struct {
 	Os      string `json:"os"`
 	Browser string `json:"browser"`
@@ -39,7 +22,6 @@ type Guild struct {
 	Splash          string    `json:"splash"`           // Nullable
 	DiscoverySplash string    `json:"discovery_splash"` // Nullable
 	OwnerId         Snowflake `json:"owner_id"`
-	// TODO: A lot more fields. Only bothered adding the ones needed for early partial objs
 }
 
 // User represents https://discord.com/developers/docs/resources/guild#guild-object
@@ -96,7 +78,6 @@ type Application struct {
 	Icon        string    `json:"icon"` // Nullable
 	Description string    `json:"description"`
 	Flags       int       `json:"flags,omitempty"` // Optional, not nullable
-	// TODO: A lot more fields. Only bothered adding the ones needed for early partial objs
 }
 
 // Message represents https://discord.com/developers/docs/resources/message#message-object

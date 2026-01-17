@@ -14,9 +14,10 @@ import (
 )
 
 const getGatewayUrl = apiUrl + "/gateway/bot"
+const defaultQueueSize = 16
 
 // Websocket close codes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes
-// Codes not needed for responses (e.g. encoding errors) have not been included.
+// Codes not needed for responses have not been included (e.g. encoding errors)
 const (
 	closeUnknownError         = 4000
 	closeNotAuthenticated     = 4003
@@ -28,11 +29,11 @@ const (
 
 // Gateway stores a Client's gateway connection details
 type Gateway struct {
-	conn      *websocket.Conn // Websocket connection for the client. This may be nil at times, always use the sendQueue where applicable.
-	sendQueue chan []byte     // Thread-safe buffer for writing to the websocket connection, it also prevents losing payloads when reconnecting.
+	conn      *websocket.Conn // Websocket connection for the client. Only supports writing from one thread, use sendQueue to write to it
+	sendQueue chan []byte     // Thread-safe buffer for writing to conn, can still accept items even when disconnected
 
-	writersBlock  chan bool // writersBlock will stop the websocket writer routine. Don't access this directly.
-	cardiacArrest chan bool // cardiacArrest will make the client stop sending heartbeats. Don't access this directly.
+	writersBlock  chan bool // writersBlock will stop the handleWriting writer routine
+	cardiacArrest chan bool // cardiacArrest will stop the handleHeartbeats goroutine
 
 	intents int // Gateway intents the bot will be using https://discord.com/developers/docs/events/gateway#gateway-intents
 
@@ -44,21 +45,25 @@ type Gateway struct {
 	heartbeatAcknowledged bool // Set to false when the client sends a heartbeat. If discord doesn't acknowledge before the next heartbeat, we reconnect. No mutex needed as booleans don't tear and there's a large interval
 }
 
+func defaultGateway(intents int) Gateway {
+	return Gateway{
+		sendQueue: make(chan []byte, defaultQueueSize), // Arbitrary capacity to prevent blocking.
+		intents:   intents,
+	}
+}
+
 // GatewayPayload represents a gateway payload for discord API. Pointers are for optional fields to encode as NULL
 // See: https://discord.com/developers/docs/events/gateway-events#payload-structure
 type GatewayPayload struct {
-	Opcode      int              `json:"op"` // Opcode of the gateway event. See: https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
-	Data        *json.RawMessage `json:"d"`  // Data is a JSON encoded payload for the event
-	SequenceNum *int             `json:"s"`  // SequenceNum of the event, used for resuming sessions and heartbeats. Will be omitted if Opcode is not 0.
-	EventName   *string          `json:"t"`  // EventName of the payload held in Data. Will be omitted if Opcode is not 0.
+	Opcode      int              `json:"op"`
+	Data        *json.RawMessage `json:"d"`
+	SequenceNum *int             `json:"s,omitempty"`
+	EventName   *string          `json:"t,omitempty"`
 }
 
 // SendPayload sends the given GatewayPayload on the websocket connection if one is open, or errors if there is no valid
 // connection or the payload fails to encode
 func (gateway *Gateway) SendPayload(payload *GatewayPayload) error {
-	if gateway.sendQueue == nil || gateway.conn == nil {
-		return errors.New("cannot send a gateway payload without a connection")
-	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -72,17 +77,13 @@ func (client *Client) CloseGateway() {
 	if client.Gateway.conn != nil {
 		client.Gateway.conn.Close()
 	}
-	if client.Gateway.cardiacArrest != nil {
-		client.Gateway.cardiacArrest <- true
-	}
-	if client.Gateway.writersBlock != nil {
-		client.Gateway.writersBlock <- true // Make sure we stop trying to write to the socket. Reader will stop itself.
-	}
+	client.Gateway.cardiacArrest <- true
+	client.Gateway.writersBlock <- true // Make sure we stop trying to write to the socket. Reader will stop itself.
 	client.Gateway.conn = nil
 }
 
 // handleClosed handles clean-up of background tasks after the websocket connection was closed by discord.
-func (client *Client) handleClosed(code int) (err error) {
+func (client *Client) handleClosed(code int, text string) (err error) {
 	client.Gateway.cardiacArrest <- true
 	client.Gateway.writersBlock <- true
 	client.Gateway.conn = nil
@@ -129,7 +130,7 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	if resume {
 		url = client.Gateway.resumeUrl
 		if url == "" {
-			return errors.New("cannot resume without a valid resume url")
+			return errors.New("invalid resume url: " + client.Gateway.resumeUrl)
 		}
 	} else {
 		if client.Gateway.url == "" {
@@ -146,9 +147,9 @@ func (client *Client) connectGateway(resume bool) (err error) {
 		return err
 	}
 
-	client.Gateway.conn.SetCloseHandler(func(code int, text string) error { return client.handleClosed(code) })
-	defer func() { // Ensure we cancel the write/beater routines & disconnect if handshake fails.
-		if err != nil {
+	client.Gateway.conn.SetCloseHandler(client.handleClosed)
+	defer func() {
+		if err != nil { // Ensure we cancel the write/beater routines & disconnect if handshake fails.
 			client.CloseGateway()
 		}
 	}()
@@ -177,14 +178,13 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	client.Gateway.cardiacArrest = make(chan bool, 1)
 	client.Gateway.writersBlock = make(chan bool, 1)
 
-	go client.startBeating(time.Millisecond * time.Duration(hello.HeartbeatInterval))            // cardiacArrest can cancel startBeating
+	go client.handleHeartbeats(time.Millisecond * time.Duration(hello.HeartbeatInterval))        // cardiacArrest can cancel handleHeartbeats
 	go handleWriting(client.Gateway.conn, client.Gateway.sendQueue, client.Gateway.writersBlock) // writersBlock can cancel handleWriting
-	go handleReading(client.Gateway.conn, client)                                                // handleReading is self cancelling
+	go client.handleReading(client.Gateway.conn)                                                 // handleReading is self cancelling
 
 	// Send IDENTIFY or RESUME handshake. The result of these will be handled by handleReading
 	if resume {
 		id, err := json.Marshal(ResumePayload{Token: client.Token, SessionId: client.Gateway.sessionId, SequenceNum: client.Gateway.sequence.Load()})
-
 		if err != nil {
 			panic(err) // Should never be hit
 		}
@@ -206,8 +206,6 @@ func (client *Client) connectGateway(resume bool) (err error) {
 		}
 		slog.Info("Identifying...")
 	}
-
-	slog.Info("Successfully connected to gateway")
 	return nil
 }
 
@@ -221,10 +219,20 @@ func (client *Client) reconnectGateway(resume bool) error {
 	return client.connectGateway(false)
 }
 
-func (client *Client) startBeating(interval time.Duration) {
-	if client.Gateway.conn == nil || client.Gateway.cardiacArrest == nil {
+func (client *Client) heartbeat() {
+	data, err := json.Marshal(client.Gateway.sequence.Load())
+	if err != nil {
+		panic(err) // should never be hit
+	}
+
+	if err = client.Gateway.SendPayload(&GatewayPayload{Opcode: opHeartbeat, Data: (*json.RawMessage)(&data)}); err != nil {
+		slog.Error("Failed to send heartbeat: " + err.Error())
 		return
 	}
+	client.Gateway.heartbeatAcknowledged = false
+}
+
+func (client *Client) handleHeartbeats(interval time.Duration) {
 	for {
 		select {
 		case <-client.Gateway.cardiacArrest:
@@ -243,20 +251,6 @@ func (client *Client) startBeating(interval time.Duration) {
 	}
 }
 
-func (client *Client) heartbeat() {
-	payload := GatewayPayload{Opcode: opHeartbeat, Data: nil}
-	if d, err := json.Marshal(client.Gateway.sequence.Load()); err == nil {
-		payload.Data = (*json.RawMessage)(&d)
-	} else {
-		panic(err) // Should never be hit
-	}
-	if err := client.Gateway.SendPayload(&payload); err != nil {
-		return
-	}
-	client.Gateway.heartbeatAcknowledged = false
-}
-
-// handleWriting reads any payloads in a channel and writes them to a websocket connection.
 func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan bool) {
 	for {
 		select {
@@ -270,9 +264,9 @@ func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan boo
 	}
 }
 
-// handleReading reads all payloads from a websocket connection and delegates their handling to relevant functions.
+// handleReading reads all payloads from a websocket connection and dispatches them to the event handler.
 // No stop flag is needed as the connection will return an error when it closes anyway.
-func handleReading(conn *websocket.Conn, client *Client) {
+func (client *Client) handleReading(conn *websocket.Conn) {
 	for { // TODO: Reading thread currently gets blocked by handling the payload.
 		payload, err := readPayload(conn)
 		if err != nil {

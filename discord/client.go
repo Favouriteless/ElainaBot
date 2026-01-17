@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -28,12 +27,9 @@ type Client struct {
 }
 
 // CreateClient creates and initialises a discord client and its gateway connection
-func CreateClient(name string, intents int) (*Client, error) {
-	client, err := loadClient(name, intents)
-	if err != nil {
-		return nil, err
-	}
-	if err = client.initialise(); err != nil {
+func CreateClient(name string, id string, secret string, token string, intents int) (*Client, error) {
+	client := defaultClient(name, id, secret, token, intents)
+	if err := client.initialise(); err != nil {
 		return nil, err
 	}
 	return client, nil
@@ -41,36 +37,28 @@ func CreateClient(name string, intents int) (*Client, error) {
 
 // initialise is responsible for any post-instantiation setup required for clients
 func (client *Client) initialise() error {
-	client.Events.Ready.Register(func(payload ReadyPayload) { // Built-in event handler for updating the gateway resume URL and session ID
-		client.Gateway.url = payload.ResumeGatewayUrl
-		client.Gateway.sessionId = payload.SessionId
-	})
-	client.Events.InteractionCreate.Register(client.handleInteractionCreate)
+
 	return nil
 }
 
-// loadClient initialises a default Client instance and handles loading bot details from JSON such as client id, client
-// secret and bot token
-func loadClient(name string, intents int) (*Client, error) {
-	contents, err := os.ReadFile("data/secrets.json")
-	if err != nil {
-		return nil, err
-	}
-
+func defaultClient(name string, id string, secret string, token string, intents int) *Client {
 	client := Client{
-		Name: name,
-		Http: http.Client{Timeout: time.Second * 10},
-		Gateway: Gateway{
-			sendQueue: make(chan []byte, 10), // Arbitrary capacity to prevent blocking.
-			intents:   intents,
-		},
-		Events: defaultEvents(),
+		Name:    name,
+		Http:    http.Client{Timeout: time.Second * 5},
+		Id:      id,
+		Secret:  secret,
+		Token:   token,
+		Gateway: defaultGateway(intents),
+		Events:  defaultEvents(),
 	}
+	client.Events.InteractionCreate.Register(client.handleInteractionCommands) // Built-in event handler for dispatching interaction commands
+	client.Events.Ready.Register(client.handleReady)                           // Built-in event handler for updating the gateway resume URL and session ID
+	return &client
+}
 
-	if err = json.Unmarshal(contents, &client); err != nil {
-		return nil, err
-	}
-	return &client, err
+func (client *Client) handleReady(payload ReadyPayload) {
+	client.Gateway.url = payload.ResumeGatewayUrl
+	client.Gateway.sessionId = payload.SessionId
 }
 
 func (client *Client) DeployCommand(command *ApplicationCommand, attempts int) (*http.Response, error) {
@@ -88,6 +76,7 @@ func (client *Client) DeleteCommand(command Snowflake) (*http.Response, error) {
 }
 
 func (client *Client) DeployAllCommands() {
+	slog.Info("Deploying all application commands...")
 	for _, com := range client.Commands {
 		func() {
 			resp, err := client.DeployCommand(com, 3)
@@ -99,9 +88,9 @@ func (client *Client) DeployAllCommands() {
 
 			switch resp.StatusCode {
 			case 200:
-				slog.Info("Command updated successfully: ", com.Name)
+				slog.Info("Command updated successfully: " + com.Name)
 			case 201:
-				slog.Info("Command added successfully: ", com.Name)
+				slog.Info("Command added successfully: " + com.Name)
 			default:
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {

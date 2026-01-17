@@ -5,14 +5,14 @@ import (
 	"errors"
 )
 
-// https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
+// Command context as specified by https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
 const (
 	CmdContextGuild          = 0
 	CmdContextBotDm          = 1
 	CmdContextPrivateChannel = 2
 )
 
-// https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types
+// Command type as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types
 const (
 	CmdTypeChatInput         = 1
 	CmdTypeUserInput         = 2
@@ -143,11 +143,7 @@ func (o *CommandOptionData) UnmarshalJSON(data []byte) error {
 		}
 		o.Value = a
 	default:
-		// Default unmarshal behaviour:
-		// Bool -> bool
-		// Num -> float64
-		// String -> string (Snowflake)
-		// Null -> nil
+		// Default unmarshal behaviour: Bool -> bool, Num -> float64, String -> string (Snowflake), Null -> nil
 		if err := json.Unmarshal(partial.Value, &o.Value); err != nil {
 			return err
 		}
@@ -218,7 +214,7 @@ func (o *CommandOptionData) AsAttachment() (*Attachment, error) {
 	return o.Value.(*Attachment), nil
 }
 
-var idToOptType = map[int]string{
+var idToOptTypeName = map[int]string{
 	3:  "String",
 	4:  "Integer",
 	5:  "Boolean",
@@ -232,7 +228,7 @@ var idToOptType = map[int]string{
 
 func (o *CommandOptionData) assertType(expected int) error {
 	if o.Type != expected {
-		return errors.New("expected option of type " + idToOptType[expected] + " but got " + idToOptType[o.Type])
+		return errors.New("expected option of type " + idToOptTypeName[expected] + " but got " + idToOptTypeName[o.Type])
 	}
 	return nil
 }

@@ -1,5 +1,20 @@
 package discord
 
+const ( // Payload Opcodes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
+	opDispatch          = 0  // Receive
+	opHeartbeat         = 1  // Bidirectional
+	opIdentify          = 2  // Send
+	opPresenceUpdate    = 3  // Send
+	opVoiceUpdate       = 4  // Send
+	opResume            = 6  // Send
+	opReconnect         = 7  // Receive
+	opRequestMembers    = 8  // Send
+	opInvalidSession    = 9  // Receive
+	opHello             = 10 // Receive
+	opHeartbeatAck      = 11 // Receive
+	opRequestSoundboard = 31 // Send
+)
+
 // HelloPayload is a non-standard event, it doesn't have a type. Opcode 1 instead
 type HelloPayload struct {
 	HeartbeatInterval int `json:"heartbeat_interval"`

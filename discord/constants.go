@@ -1,6 +1,23 @@
 package discord
 
-const ( // All guild permission bits as constants. These can be ORed
+// Message flag as specified by https://discord.com/developers/docs/resources/message#message-object-message-flags
+const (
+	MsgFlagCrossposted                  = 1 << 0
+	MsgFlagIsCrosspost                  = 1 << 1
+	MsgFlagSuppressEmbeds               = 1 << 2
+	MsgFlagSourceDeleted                = 1 << 3
+	MsgFlagUrgent                       = 1 << 4
+	MsgFlagHasThread                    = 1 << 5
+	MsgFlagEphemeral                    = 1 << 6
+	MsgFlagLoading                      = 1 << 7
+	MsgFlagFailedToMentionRolesInThread = 1 << 8
+	MsgFlagSuppressNotifications        = 1 << 9
+	MsgFlagIsVoiceMsg                   = 1 << 10
+	MsgFlagHasSnapshot                  = 1 << 11
+	MsgFlagIsComponentsV2               = 1 << 12
+)
+
+const ( // Guild permission bit as specified by https://discord.com/developers/docs/topics/permissions#permissions-bitwise-permission-flags
 	PermCreateInvite              = 1 << 0
 	PermKick                      = 1 << 1
 	PermBan                       = 1 << 2
@@ -53,7 +70,7 @@ const ( // All guild permission bits as constants. These can be ORed
 	PermPinMessages               = 1 << 51
 )
 
-const ( // All gateway intent bits expressed as constants. These can be ORed
+const ( // Gateway intent bit as specified by https://discord.com/developers/docs/events/gateway#gateway-intents
 	IntentGuilds                 = 1 << 0
 	IntentGuildMembers           = 1 << 1
 	IntentGuildModeration        = 1 << 2
