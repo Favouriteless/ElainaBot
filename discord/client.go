@@ -3,7 +3,7 @@ package discord
 import (
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -45,23 +45,7 @@ func (client *Client) initialise() error {
 		client.Gateway.url = payload.ResumeGatewayUrl
 		client.Gateway.sessionId = payload.SessionId
 	})
-
-	client.Events.InteractionCreate.Register(func(payload InteractionCreatePayload) { // Built-in event handler for dispatching application Commands
-		if payload.Type == 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
-			var c ApplicationCommandData
-			if err := json.Unmarshal(*payload.Data, &c); err != nil {
-				log.Println("Error parsing command:", err)
-				return
-			}
-
-			log.Println("Dispatching command: " + c.Name)
-			for _, command := range client.Commands {
-				if c.Name == command.Name && command.Handler(c) {
-					break
-				}
-			}
-		}
-	})
+	client.Events.InteractionCreate.Register(client.handleInteractionCreate)
 	return nil
 }
 
@@ -108,23 +92,22 @@ func (client *Client) DeployAllCommands() {
 		func() {
 			resp, err := client.DeployCommand(com, 3)
 			if err != nil {
-				log.Printf("Error registering command \"%s\": %s", com.Name, err)
+				slog.Error("Error registering command: ", slog.String("command", com.Name), slog.String("error", err.Error()))
 				return
 			}
 			defer resp.Body.Close()
 
 			switch resp.StatusCode {
 			case 200:
-				log.Printf("Command \"%s\" already exists, it was updated", com.Name)
+				slog.Info("Command updated successfully: ", com.Name)
 			case 201:
-				log.Printf("Command \"%s\" added successfully", com.Name)
+				slog.Info("Command added successfully: ", com.Name)
 			default:
-				log.Printf("Command \"%s\" could not be created: %s", com.Name, resp.Status)
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					panic(err) // Should never be hit
 				}
-				log.Println(string(body))
+				slog.Error("Command could not be created: ", slog.String("command", com.Name), slog.String("status_code", resp.Status), slog.String("body", string(body)))
 			}
 		}()
 	}

@@ -6,6 +6,23 @@ import "encoding/json"
 // https://discord.com/developers/docs/reference#snowflakes
 type Snowflake = string
 
+// https://discord.com/developers/docs/resources/message#message-object-message-flags
+const (
+	MsgFlagCrossposted                  = 1 << 0
+	MsgFlagIsCrosspost                  = 1 << 1
+	MsgFlagSuppressEmbeds               = 1 << 2
+	MsgFlagSourceDeleted                = 1 << 3
+	MsgFlagUrgent                       = 1 << 4
+	MsgFlagHasThread                    = 1 << 5
+	MsgFlagEphemeral                    = 1 << 6
+	MsgFlagLoading                      = 1 << 7
+	MsgFlagFailedToMentionRolesInThread = 1 << 8
+	MsgFlagSuppressNotifications        = 1 << 9
+	MsgFlagIsVoiceMsg                   = 1 << 10
+	MsgFlagHasSnapshot                  = 1 << 11
+	MsgFlagIsComponentsV2               = 1 << 12
+)
+
 type ConnectionProperties struct {
 	Os      string `json:"os"`
 	Browser string `json:"browser"`
@@ -40,9 +57,7 @@ type User struct {
 	Locale               string                `json:"locale"`                 // Optional
 	Verified             *bool                 `json:"verified"`               // Optional
 	Email                string                `json:"email"`                  // Optional
-	Flags                *int                  `json:"flags"`                  // Optional
 	PremiumType          *int                  `json:"premium_type"`           // Optional
-	PublicFlags          *int                  `json:"public_flags"`           // Optional
 	AvatarDecorationData *AvatarDecorationData `json:"avatar_decoration_data"` // Optional
 	Collectibles         *Collectibles         `json:"collectibles"`           // Optional
 	PrimaryGuild         *UserPrimaryGuild     `json:"primary_guild"`          // Optional, nullable
@@ -80,47 +95,46 @@ type Application struct {
 	Name        string    `json:"name"`
 	Icon        string    `json:"icon"` // Nullable
 	Description string    `json:"description"`
-	Flags       *int      `json:"flags,omitempty"` // Optional, not nullable
+	Flags       int       `json:"flags,omitempty"` // Optional, not nullable
 	// TODO: A lot more fields. Only bothered adding the ones needed for early partial objs
 }
 
 // Message represents https://discord.com/developers/docs/resources/message#message-object
 type Message struct {
-	Id              Snowflake        `json:"id"`
+	Id              Snowflake        `json:"id,omitempty"`
 	ChannelId       Snowflake        `json:"channel_id"`
-	Author          User             `json:"author"`
-	Content         string           `json:"content"` // Requires MESSAGE_CONTENT intent
-	Timestamp       string           `json:"timestamp"`
-	EditedTimestamp string           `json:"edited_timestamp"` // Nullable
+	Author          User             `json:"author,omitempty"`
+	Content         string           `json:"content"` // Requires IntentMessageContent
+	Timestamp       string           `json:"timestamp,omitempty"`
+	EditedTimestamp string           `json:"edited_timestamp,omitempty"` // Nullable
 	Tts             bool             `json:"tts"`
 	MentionEveryone bool             `json:"mention_everyone"`
 	Mentions        []User           `json:"mentions"`
 	MentionRoles    []Snowflake      `json:"mention_roles"`
-	MentionChannels []ChannelMention `json:"mention_channels"`
+	MentionChannels []ChannelMention `json:"mention_channels,omitempty"`
 	Attachments     []Attachment     `json:"attachments"`
 	// Embeds
-	Reactions []Reaction `json:"reactions"` // Optional
+	Reactions []Reaction `json:"reactions,omitempty"` // Optional
 	// Nonce (? lol what)
-	Pinned    bool       `json:"pinned"`
-	WebhookId *Snowflake `json:"webhook_id"` // Optional
-	Type      int        `json:"type"`
+	Pinned    bool      `json:"pinned"`
+	WebhookId Snowflake `json:"webhook_id,omitempty"` // Optional
+	Type      int       `json:"type"`
 	// Activity
-	Application       *Application       `json:"application"`        // Optional
-	ApplicationId     *Snowflake         `json:"application_id"`     // Optional
-	Flags             *int               `json:"flags"`              // Optional
-	MessageReference  []MessageReference `json:"message_reference"`  // Optional
-	MessageSnapshots  []MessageSnapshot  `json:"message_snapshots"`  // Optional
-	ReferencedMessage *MessageReference  `json:"referenced_message"` // Optional, Nullable
+	Application       *Application       `json:"application,omitempty"`        // Optional
+	ApplicationId     Snowflake          `json:"application_id,omitempty"`     // Optional
+	Flags             int                `json:"flags,omitempty"`              // Optional
+	MessageReference  []MessageReference `json:"message_reference,omitempty"`  // Optional
+	MessageSnapshots  []MessageSnapshot  `json:"message_snapshots,omitempty"`  // Optional
+	ReferencedMessage *MessageReference  `json:"referenced_message,omitempty"` // Optional, Nullable
 	// InteractionMetadata
-	// Interaction
-	// Thread
+	Thread *Channel `json:"thread,omitempty"` // Optional
 	// Components
-	StickerItems         []StickerItem         `json:"sticker_items"`          // Optional
-	Position             *int                  `json:"position"`               // Optional
-	RoleSubscriptionData *RoleSubscriptionData `json:"role_subscription_data"` // Optional
-	// Resolved
-	// Poll
-	Call *MessageCall `json:"call"` // Optional
+	StickerItems         []StickerItem         `json:"sticker_items,omitempty"`          // Optional
+	Position             *int                  `json:"position,omitempty"`               // Optional
+	RoleSubscriptionData *RoleSubscriptionData `json:"role_subscription_data,omitempty"` // Optional
+	Resolved             *ResolvedData         `json:"resolved,omitempty"`               // Optional
+	Poll                 *Poll                 `json:"poll,omitempty"`                   // Optional
+	Call                 *MessageCall          `json:"call,omitempty"`                   // Optional
 }
 
 // Role represents https://discord.com/developers/docs/topics/permissions#role-object
@@ -200,14 +214,14 @@ type ReactionCountDetails struct {
 
 // Emoji represents https://discord.com/developers/docs/resources/emoji#emoji-object
 type Emoji struct {
-	Id            *Snowflake  `json:"id"`             // Nullable
-	Name          string      `json:"name"`           // Nullable
-	Roles         []Snowflake `json:"roles"`          // Optional
-	User          User        `json:"user"`           // Optional
-	RequireColons bool        `json:"require_colons"` // Optional
-	Managed       bool        `json:"managed"`        // Optional
-	Animated      bool        `json:"animated"`       // Optional
-	Available     bool        `json:"available"`      // Optional
+	Id            *Snowflake  `json:"id,omitempty"`             // Nullable
+	Name          string      `json:"nam,omitempty"`            // Nullable
+	Roles         []Snowflake `json:"roles,omitempty"`          // Optional
+	User          User        `json:"user,omitempty"`           // Optional
+	RequireColons bool        `json:"require_colons,omitempty"` // Optional
+	Managed       bool        `json:"managed,omitempty"`        // Optional
+	Animated      bool        `json:"animated,omitempty"`       // Optional
+	Available     bool        `json:"available,omitempty"`      // Optional
 }
 
 // MessageReference represents https://discord.com/developers/docs/resources/message#message-reference-object
@@ -378,4 +392,41 @@ type Interaction struct {
 	GuildLocale         string           `json:"guild_locale"`
 	Context             *int             `json:"context"` // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
 	AttachmentSizeLimit int              `json:"attachment_size_limit"`
+}
+
+// AllowedMentions represents https://discord.com/developers/docs/resources/message#allowed-mentions-object
+type AllowedMentions = string
+
+// Poll represents https://discord.com/developers/docs/resources/poll#poll-object-poll-object-structure
+type Poll struct {
+	Question         PollMedia    `json:"question"` // Only supports text of PollMedia
+	Answers          []PollAnswer `json:"answers"`
+	Expiry           string       `json:"expiry,omitempty"`
+	AllowMultiselect bool         `json:"allow_multiselect"`
+	LayoutType       int          `json:"layout_type"` // Must be 1. It's future proofing by discord.
+	Results          *PollResults `json:"results,omitempty"`
+}
+
+// PollMedia represents https://discord.com/developers/docs/resources/poll#poll-media-object-poll-media-object-structure
+type PollMedia struct {
+	Text  string `json:"text"`            // Max length: 300 for question, 55 for answer
+	Emoji *Emoji `json:"emoji,omitempty"` // PARTIAL: Only ID or name needed
+}
+
+// PollAnswer represents https://discord.com/developers/docs/resources/poll#poll-answer-object-poll-answer-object-structure
+type PollAnswer struct {
+	AnswerId  *Snowflake `json:"answer_id,omitempty"` // Only sent by discord. Do not send.
+	PollMedia PollMedia  `json:"poll_media"`
+}
+
+// PollResults represents https://discord.com/developers/docs/resources/poll#poll-results-object-poll-results-object-structure
+type PollResults struct {
+	Finalized    bool              `json:"is_finalized"`
+	AnswerCounts []PollAnswerCount `json:"answer_counts"`
+}
+
+// PollAnswerCount represents https://discord.com/developers/docs/resources/poll#poll-results-object-poll-answer-count-object-structure
+type PollAnswerCount struct {
+	Id    int `json:"id"`
+	Count int `json:"count"`
 }

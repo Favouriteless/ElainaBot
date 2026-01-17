@@ -2,7 +2,7 @@ package discord
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 )
 
 const ( // Payload Opcodes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
@@ -39,7 +39,7 @@ func (event *GatewayEventType[T]) dispatch(raw []byte) {
 	}
 	var data T
 	if err := json.Unmarshal(raw, &data); err != nil {
-		log.Printf("Failed to dispatch gateway event: %s", err)
+		slog.Error("Failed to parse gateway event: " + err.Error())
 		return
 	}
 	for _, handler := range event.handlers {
@@ -60,14 +60,14 @@ type EventDispatcher struct {
 
 func defaultEvents() EventDispatcher {
 	return EventDispatcher{ // Do not use explicit names here, we want the compiler to complain if an event is missing
-		GatewayEventType[ReadyPayload]{Name: "READY"},
-		GatewayEventType[CreateMessagePayload]{Name: "MESSAGE_CREATE"},
-		GatewayEventType[UpdateMessagePayload]{Name: "MESSAGE_UPDATE"},
-		GatewayEventType[DeleteMessagePayload]{Name: "MESSAGE_DELETE"},
-		GatewayEventType[BulkDeleteMessagePayload]{Name: "MESSAGE_DELETE_BULK"},
-		GatewayEventType[ReactionAddPayload]{Name: "MESSAGE_REACTION_ADD"},
-		GatewayEventType[ReactionRemovePayload]{Name: "MESSAGE_REACTION_REMOVE"},
-		GatewayEventType[InteractionCreatePayload]{Name: "INTERACTION_CREATE"},
+		Ready:             GatewayEventType[ReadyPayload]{Name: "READY"},
+		CreateMessage:     GatewayEventType[CreateMessagePayload]{Name: "MESSAGE_CREATE"},
+		UpdateMessage:     GatewayEventType[UpdateMessagePayload]{Name: "MESSAGE_UPDATE"},
+		DeleteMessage:     GatewayEventType[DeleteMessagePayload]{Name: "MESSAGE_DELETE"},
+		BulkDeleteMessage: GatewayEventType[BulkDeleteMessagePayload]{Name: "MESSAGE_DELETE_BULK"},
+		ReactionAdd:       GatewayEventType[ReactionAddPayload]{Name: "MESSAGE_REACTION_ADD"},
+		ReactionRemove:    GatewayEventType[ReactionRemovePayload]{Name: "MESSAGE_REACTION_REMOVE"},
+		InteractionCreate: GatewayEventType[InteractionCreatePayload]{Name: "INTERACTION_CREATE"},
 	}
 }
 

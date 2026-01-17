@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
-	"sync"
+	"log/slog"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -35,11 +36,10 @@ type Gateway struct {
 
 	intents int // Gateway intents the bot will be using https://discord.com/developers/docs/events/gateway#gateway-intents
 
-	url        string // URL for connecting to Discord's Gateway API
-	resumeUrl  string // URL for resuming a gateway connection
-	sessionId  string // ID of gateway session, only applicable if resuming
-	sequence   *int   // The last sequence number the client received from gateway
-	sequenceMu sync.Mutex
+	url       string       // URL for connecting to Discord's Gateway API
+	resumeUrl string       // URL for resuming a gateway connection
+	sessionId string       // ID of gateway session, only applicable if resuming
+	sequence  atomic.Int32 // The last sequence number the client received from gateway
 
 	heartbeatAcknowledged bool // Set to false when the client sends a heartbeat. If discord doesn't acknowledge before the next heartbeat, we reconnect. No mutex needed as booleans don't tear and there's a large interval
 }
@@ -57,7 +57,7 @@ type GatewayPayload struct {
 // connection or the payload fails to encode
 func (gateway *Gateway) SendPayload(payload *GatewayPayload) error {
 	if gateway.sendQueue == nil || gateway.conn == nil {
-		return errors.New("cannot send a gateway payload without a valid connection being open")
+		return errors.New("cannot send a gateway payload without a connection")
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -87,7 +87,7 @@ func (client *Client) handleClosed(code int) (err error) {
 	client.Gateway.writersBlock <- true
 	client.Gateway.conn = nil
 
-	log.Printf("Discord closed the gateway connection: %v", code)
+	slog.Info("Gateway connection closed: " + strconv.Itoa(code))
 
 	switch code {
 	case closeUnknownError: // Don't really like this but what else can you do
@@ -140,7 +140,7 @@ func (client *Client) connectGateway(resume bool) (err error) {
 		url = client.Gateway.url
 	}
 
-	log.Println("Attempting gateway connection...")
+	slog.Info("Attempting to connect to gateway:", slog.String("api_version", apiVersion), slog.String("api_encoding", apiEncoding))
 	client.Gateway.conn, _, err = websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return err
@@ -183,16 +183,15 @@ func (client *Client) connectGateway(resume bool) (err error) {
 
 	// Send IDENTIFY or RESUME handshake. The result of these will be handled by handleReading
 	if resume {
-		client.Gateway.sequenceMu.Lock()
-		id, err := json.Marshal(ResumePayload{Token: client.Token, SessionId: client.Gateway.sessionId, SequenceNum: *client.Gateway.sequence})
-		client.Gateway.sequenceMu.Unlock()
+		id, err := json.Marshal(ResumePayload{Token: client.Token, SessionId: client.Gateway.sessionId, SequenceNum: client.Gateway.sequence.Load()})
+
 		if err != nil {
 			panic(err) // Should never be hit
 		}
 		if err = client.Gateway.SendPayload(&GatewayPayload{Opcode: opResume, Data: (*json.RawMessage)(&id)}); err != nil {
 			panic(err) // Should never be hit
 		}
-		log.Println("Sending resume...")
+		slog.Info("Resuming gateway...")
 	} else {
 		res, err := json.Marshal(IdentifyPayload{
 			Token:      client.Token,
@@ -205,10 +204,10 @@ func (client *Client) connectGateway(resume bool) (err error) {
 		if err = client.Gateway.SendPayload(&GatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&res)}); err != nil {
 			panic(err) // Should never be hit
 		}
-		log.Println("Sending identify...")
+		slog.Info("Identifying...")
 	}
 
-	log.Println("Gateway connection established")
+	slog.Info("Successfully connected to gateway")
 	return nil
 }
 
@@ -234,7 +233,7 @@ func (client *Client) startBeating(interval time.Duration) {
 			time.Sleep(interval)
 			if !client.Gateway.heartbeatAcknowledged { // If not acknowledged, assume the connection is dead & reconnect
 				if err := client.reconnectGateway(true); err != nil {
-					log.Printf("failed to reconnect after heartbeat: %s", err)
+					slog.Error("Failed to reconnect after heartbeat: " + err.Error())
 					client.CloseGateway()
 				}
 			} else {
@@ -246,20 +245,15 @@ func (client *Client) startBeating(interval time.Duration) {
 
 func (client *Client) heartbeat() {
 	payload := GatewayPayload{Opcode: opHeartbeat, Data: nil}
-	client.Gateway.sequenceMu.Lock()
-	if client.Gateway.sequence != nil {
-		if d, err := json.Marshal(*(client.Gateway.sequence)); err == nil {
-			payload.Data = (*json.RawMessage)(&d)
-		} else {
-			panic(err) // Should never be hit
-		}
+	if d, err := json.Marshal(client.Gateway.sequence.Load()); err == nil {
+		payload.Data = (*json.RawMessage)(&d)
+	} else {
+		panic(err) // Should never be hit
 	}
-	client.Gateway.sequenceMu.Unlock()
 	if err := client.Gateway.SendPayload(&payload); err != nil {
 		return
 	}
 	client.Gateway.heartbeatAcknowledged = false
-	log.Println("Sending heartbeat...")
 }
 
 // handleWriting reads any payloads in a channel and writes them to a websocket connection.
@@ -270,7 +264,7 @@ func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan boo
 			return
 		case payload := <-payloads:
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-				log.Printf("Failed to write to gateway websocket: %s", err) // This should never be hit, but just in case
+				slog.Error("Failed write to gateway websocket: " + err.Error()) // This should never be hit, but just in case
 			}
 		}
 	}
@@ -282,37 +276,34 @@ func handleReading(conn *websocket.Conn, client *Client) {
 	for { // TODO: Reading thread currently gets blocked by handling the payload.
 		payload, err := readPayload(conn)
 		if err != nil {
-			log.Printf("Failed to read gateway message: %s", err)
+			slog.Error("Failed read gateway message: " + err.Error())
 			return
 		}
 
 		switch payload.Opcode {
 		case opDispatch:
-			log.Printf("Received event: %s", *payload.EventName)
-			client.Gateway.sequenceMu.Lock()
-			client.Gateway.sequence = payload.SequenceNum
-			client.Gateway.sequenceMu.Unlock()
+			client.Gateway.sequence.Store(int32(*payload.SequenceNum))
 			client.Events.dispatchEvent(*payload.EventName, *payload.Data)
 		case opHeartbeat:
-			log.Println("Discord requested a heartbeat")
 			client.heartbeat()
 		case opReconnect:
-			log.Println("Discord requested a reconnect")
+			slog.Info("Discord requested a gateway reconnect...")
 			if err := client.reconnectGateway(true); err != nil {
-				log.Printf("Failed to reconnect: %s", err)
+				slog.Info("Failed to reconnect to gateway: " + err.Error())
 				client.CloseGateway()
 			}
 		case opInvalidSession:
-			log.Println("Discord invalidated the session")
+			slog.Warn("Discord invalidated the gateway session. Attempting to reconnect...")
 			var resume bool
 			_ = json.Unmarshal(*payload.Data, &resume)
 			if err := client.reconnectGateway(resume); err != nil {
-				log.Printf("Failed to reconnect: %s", err)
+				slog.Error("Failed to reconnect to gateway: " + err.Error())
 				client.CloseGateway()
+			} else {
+				slog.Info("Successfully reconnected to gateway")
 			}
 		case opHeartbeatAck:
 			client.Gateway.heartbeatAcknowledged = true
-			log.Println("Heartbeat acknowledged")
 		} // HELLO opcode can also be received but is handled by connectGateway before the reader is started
 	}
 }

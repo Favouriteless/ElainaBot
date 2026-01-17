@@ -33,6 +33,8 @@ var CmdOptMentionable = OptionType[Snowflake]{9}
 var CmdOptFloat64 = OptionType[float64]{10}
 var CmdOptAttachment = OptionType[Attachment]{11}
 
+type CommandHandler func(data ApplicationCommandData, id Snowflake, token string) error
+
 // ApplicationCommand represents https://discord.com/developers/docs/interactions/application-commands#application-command-object
 // as well as its responses https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
 type ApplicationCommand struct {
@@ -44,11 +46,11 @@ type ApplicationCommand struct {
 	Description   string          `json:"description,omitempty"` // 1-100 characters, leave empty if not CHAT_INPUT
 	Options       []CommandOption `json:"options,omitempty"`     // Optional, max 25 length. Do not access this directly, use the helpers instead
 
-	Permissions string                                 `json:"default_member_permissions,omitempty"` // Nullable (bit set). Annoyingly, discord sends this as a string.
-	Nsfw        bool                                   `json:"nsfw,omitempty"`                       // Optional, default false
-	Contexts    []int                                  `json:"contexts,omitempty"`                   // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
-	Version     Snowflake                              `json:"version,omitempty"`
-	Handler     func(data ApplicationCommandData) bool `json:"-"` // If true, the command will be consumed by this handler and not passed to others
+	Permissions string         `json:"default_member_permissions,omitempty"` // Nullable (bit set). Annoyingly, discord sends this as a string.
+	Nsfw        bool           `json:"nsfw,omitempty"`                       // Optional, default false
+	Contexts    []int          `json:"contexts,omitempty"`                   // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
+	Version     Snowflake      `json:"version,omitempty"`
+	Handler     CommandHandler `json:"-"` // If true, the command will be consumed by this handler and not passed to others
 }
 
 type OptionType[T any] struct {
@@ -84,7 +86,7 @@ type ApplicationCommandData struct {
 	Options      []CommandOptionData `json:"options"`
 	TargetId     *Snowflake          `json:"target_id"` // Only used for user & message commands
 	GuildId      *Snowflake          `json:"guild_id"`
-	ResolvedData ResolvedData        `json:"resolved"`
+	ResolvedData *ResolvedData       `json:"resolved"`
 }
 
 // OptionByName iterates over all child options and returns the first one with a matching name. If no name is found,
@@ -230,7 +232,7 @@ var idToOptType = map[int]string{
 
 func (o *CommandOptionData) assertType(expected int) error {
 	if o.Type != expected {
-		return errors.New("expected option of type " + idToOptType[o.Type] + " but got " + idToOptType[expected])
+		return errors.New("expected option of type " + idToOptType[expected] + " but got " + idToOptType[o.Type])
 	}
 	return nil
 }

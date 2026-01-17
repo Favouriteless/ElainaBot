@@ -2,7 +2,7 @@ package main
 
 import (
 	"ElainaBot/discord"
-	"log"
+	"log/slog"
 	"os"
 )
 
@@ -11,7 +11,7 @@ const intents = discord.IntentGuildMessages | discord.IntentMessageContent
 func main() {
 	client, err := discord.CreateClient("ElainaBot", intents)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	var mode string
@@ -29,34 +29,33 @@ func main() {
 			Options: []discord.CommandOption{
 				discord.CmdOptString.Create("string", "Testing string option for Devaina", true),
 			},
-			Handler: func(data discord.ApplicationCommandData) bool {
+			Handler: func(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
 				echo, err := data.OptionByName("string").AsString()
 				if err != nil {
-					log.Printf("Error completing echo: %v", err)
-					return false
+					return err
 				}
-				log.Println("Echo command: " + echo)
-				return true
+
+				resp := discord.InteractionResponse{Type: discord.RespTypeChannelMessage, Data: discord.Message{Content: echo, Flags: discord.MsgFlagEphemeral}}
+				_, err = client.SendInteractionResponse(id, token, resp)
+				return err
 			},
 		},
 	}
 
-	log.Println("Running as: " + mode)
+	slog.Info("Running as: " + mode)
 	switch mode {
 	case "--bot":
-		registerEvents(&client.Events)
+
+		client.Events.CreateMessage.Register(func(payload discord.CreateMessagePayload) {
+			slog.Info("Message received:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
+		})
+
 		if err = client.ConnectGateway(); err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 		select { // Infinite select for now, this will handle CLI inputs in a real application
 		}
 	case "--deploy_commands":
 		client.DeployAllCommands()
 	}
-}
-
-func registerEvents(dsp *discord.EventDispatcher) {
-	dsp.CreateMessage.Register(func(payload discord.CreateMessagePayload) {
-		log.Println(payload.Content)
-	})
 }

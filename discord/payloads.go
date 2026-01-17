@@ -16,7 +16,7 @@ type IdentifyPayload struct {
 type ResumePayload struct {
 	Token       string `json:"token"`
 	SessionId   string `json:"session_id"`
-	SequenceNum int    `json:"seq"`
+	SequenceNum int32  `json:"seq"`
 }
 
 // ReadyPayload is sent by discord after the client has successfully identified itself and is ready to receive events. It
