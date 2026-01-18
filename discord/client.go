@@ -15,11 +15,11 @@ const apiUrl = "https://discord.com/api/v" + apiVersion
 // Client represents the auth and session details of the discord client, all methods interfacing with Discord API will
 // require a client.
 type Client struct {
-	Name   string      // Name of the discord bot
-	Http   http.Client // HTTP client used for interacting with Discord's REST API
-	Id     string      // Client ID
-	Secret string      // Client Secret
-	Token  string      // Bot token
+	Name         string      // Name of the discord bot
+	Http         http.Client // HTTP client used for interacting with Discord's REST API
+	ClientId     string      // Client ID
+	ClientSecret string      // Client ClientSecret
+	Token        string      // Bot token
 
 	Gateway  Gateway // Gateway connection information. Most clients should not directly interact with this.
 	Events   EventDispatcher
@@ -43,13 +43,13 @@ func (client *Client) initialise() error {
 
 func defaultClient(name string, id string, secret string, token string, intents int) *Client {
 	client := Client{
-		Name:    name,
-		Http:    http.Client{Timeout: time.Second * 5},
-		Id:      id,
-		Secret:  secret,
-		Token:   token,
-		Gateway: defaultGateway(intents),
-		Events:  defaultEvents(),
+		Name:         name,
+		Http:         http.Client{Timeout: time.Second * 5},
+		ClientId:     id,
+		ClientSecret: secret,
+		Token:        token,
+		Gateway:      defaultGateway(intents),
+		Events:       defaultEvents(),
 	}
 	client.Events.InteractionCreate.Register(client.handleInteractionCommands) // Built-in event handler for dispatching interaction commands
 	client.Events.Ready.Register(client.handleReady)                           // Built-in event handler for updating the gateway resume URL and session ID
@@ -59,6 +59,7 @@ func defaultClient(name string, id string, secret string, token string, intents 
 func (client *Client) handleReady(payload ReadyPayload) {
 	client.Gateway.url = payload.ResumeGatewayUrl
 	client.Gateway.sessionId = payload.SessionId
+	slog.Info("Gateway connection established")
 }
 
 func (client *Client) DeployCommand(command *ApplicationCommand, attempts int) (*http.Response, error) {
@@ -66,12 +67,12 @@ func (client *Client) DeployCommand(command *ApplicationCommand, attempts int) (
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Post(apiUrl+"/applications/"+client.Id+"/commands", enc, attempts)
+	resp, err := client.Post(apiUrl+"/applications/"+client.ClientId+"/commands", enc, attempts)
 	return resp, err
 }
 
 func (client *Client) DeleteCommand(command Snowflake) (*http.Response, error) {
-	resp, err := client.Delete(apiUrl+"/applications/"+client.Id+"/commands/"+command, 3)
+	resp, err := client.Delete(apiUrl+"/applications/"+client.ClientId+"/commands/"+command, 3)
 	return resp, err
 }
 

@@ -12,18 +12,14 @@ import (
 const intents = discord.IntentGuildMessages | discord.IntentMessageContent
 
 func main() {
-	id := os.Getenv("ELAINA_CLIENT_ID")
-	secret := os.Getenv("ELAINA_CLIENT_SECRET")
-	token := os.Getenv("ELAINA_TOKEN")
-
-	client, err := discord.CreateClient("ElainaBot", id, secret, token, intents)
+	client, err := discord.CreateClient("ElainaBot", os.Getenv("ELAINA_CLIENT_ID"), os.Getenv("ELAINA_CLIENT_SECRET"), os.Getenv("ELAINA_TOKEN"), intents)
 	if err != nil {
 		panic(err)
 	}
 
 	deploy := flag.Bool("deploy_commands", false, "Deploy the bot's application commands")
 	flag.Parse()
-
+	
 	client.Commands = []*discord.ApplicationCommand{
 		{
 			Name:        "echo",

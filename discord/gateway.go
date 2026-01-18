@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -30,10 +31,9 @@ const (
 // Gateway stores a Client's gateway connection details
 type Gateway struct {
 	conn      *websocket.Conn // Websocket connection for the client. Only supports writing from one thread, use sendQueue to write to it
-	sendQueue chan []byte     // Thread-safe buffer for writing to conn, can still accept items even when disconnected
+	sendQueue chan []byte     // Buffer for writing to conn, can still accept items even when disconnected
 
-	writersBlock  chan bool // writersBlock will stop the handleWriting writer routine
-	cardiacArrest chan bool // cardiacArrest will stop the handleHeartbeats goroutine
+	cardiacArrest atomic.Bool // cardiacArrest will stop all gateway dependent goroutines (handleWriting, handleHeartbeat, handlePayloads)
 
 	intents int // Gateway intents the bot will be using https://discord.com/developers/docs/events/gateway#gateway-intents
 
@@ -77,15 +77,13 @@ func (client *Client) CloseGateway() {
 	if client.Gateway.conn != nil {
 		client.Gateway.conn.Close()
 	}
-	client.Gateway.cardiacArrest <- true
-	client.Gateway.writersBlock <- true // Make sure we stop trying to write to the socket. Reader will stop itself.
+	client.Gateway.cardiacArrest.Store(true) // Make sure we stop trying to write to the socket. Reader will stop itself.
 	client.Gateway.conn = nil
 }
 
 // handleClosed handles clean-up of background tasks after the websocket connection was closed by discord.
 func (client *Client) handleClosed(code int, text string) (err error) {
-	client.Gateway.cardiacArrest <- true
-	client.Gateway.writersBlock <- true
+	client.Gateway.cardiacArrest.Store(true)
 	client.Gateway.conn = nil
 
 	slog.Info("Gateway connection closed: " + strconv.Itoa(code))
@@ -156,8 +154,14 @@ func (client *Client) connectGateway(resume bool) (err error) {
 
 	// First payload sent by discord should be a HELLO https://discord.com/developers/docs/events/gateway#connection-lifecycle
 	// UPDATE: It can also in some instances be INVALID SESSION (thanks discord, very glad you documented this (you didn't) )
-	payload, err := readPayload(client.Gateway.conn)
+
+	_, msg, err := client.Gateway.conn.ReadMessage()
 	if err != nil {
+		slog.Error("Failed to read from gateway: " + err.Error())
+	}
+	var payload GatewayPayload
+	if err = json.Unmarshal(msg, &payload); err != nil {
+		slog.Error("Failed to parse gateway payload: " + err.Error())
 		return err
 	}
 
@@ -175,12 +179,11 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	client.heartbeat() // Send initial hello heartbeat
 
 	// Start background tasks for websockets
-	client.Gateway.cardiacArrest = make(chan bool, 1)
-	client.Gateway.writersBlock = make(chan bool, 1)
+	client.Gateway.cardiacArrest.Store(false)
 
-	go client.handleHeartbeats(time.Millisecond * time.Duration(hello.HeartbeatInterval))        // cardiacArrest can cancel handleHeartbeats
-	go handleWriting(client.Gateway.conn, client.Gateway.sendQueue, client.Gateway.writersBlock) // writersBlock can cancel handleWriting
-	go client.handleReading(client.Gateway.conn)                                                 // handleReading is self cancelling
+	go client.handleHeartbeats(time.Millisecond * time.Duration(hello.HeartbeatInterval))          // cardiacArrest can cancel handleHeartbeats
+	go handleWriting(client.Gateway.conn, client.Gateway.sendQueue, &client.Gateway.cardiacArrest) // writersBlock can cancel handleWriting
+	go client.handleReading(client.Gateway.conn)                                                   // handleReading is self cancelling
 
 	// Send IDENTIFY or RESUME handshake. The result of these will be handled by handleReading
 	if resume {
@@ -233,12 +236,12 @@ func (client *Client) heartbeat() {
 }
 
 func (client *Client) handleHeartbeats(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-client.Gateway.cardiacArrest:
-			return
-		default:
-			time.Sleep(interval)
+		case <-ticker.C:
 			if !client.Gateway.heartbeatAcknowledged { // If not acknowledged, assume the connection is dead & reconnect
 				if err := client.reconnectGateway(true); err != nil {
 					slog.Error("Failed to reconnect after heartbeat: " + err.Error())
@@ -247,18 +250,24 @@ func (client *Client) handleHeartbeats(interval time.Duration) {
 			} else {
 				client.heartbeat()
 			}
+		default:
+			if client.Gateway.cardiacArrest.Load() {
+				return
+			}
 		}
 	}
 }
 
-func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan bool) {
+func handleWriting(conn *websocket.Conn, payloads <-chan []byte, quit *atomic.Bool) {
 	for {
 		select {
-		case <-stop:
-			return
 		case payload := <-payloads:
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				slog.Error("Failed write to gateway websocket: " + err.Error()) // This should never be hit, but just in case
+			}
+		default:
+			if quit.Load() {
+				return
 			}
 		}
 	}
@@ -267,38 +276,48 @@ func handleWriting(conn *websocket.Conn, payloads <-chan []byte, stop <-chan boo
 // handleReading reads all payloads from a websocket connection and dispatches them to the event handler.
 // No stop flag is needed as the connection will return an error when it closes anyway.
 func (client *Client) handleReading(conn *websocket.Conn) {
-	for { // TODO: Reading thread currently gets blocked by handling the payload.
-		payload, err := readPayload(conn)
+	for {
+		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			slog.Error("Failed read gateway message: " + err.Error())
+			if !errors.Is(err, net.ErrClosed) {
+				slog.Error("Failed to read from gateway: " + err.Error())
+			}
 			return
 		}
 
-		switch payload.Opcode {
-		case opDispatch:
-			client.Gateway.sequence.Store(int32(*payload.SequenceNum))
-			client.Events.dispatchEvent(*payload.EventName, *payload.Data)
-		case opHeartbeat:
-			client.heartbeat()
-		case opReconnect:
-			slog.Info("Discord requested a gateway reconnect...")
-			if err := client.reconnectGateway(true); err != nil {
-				slog.Info("Failed to reconnect to gateway: " + err.Error())
-				client.CloseGateway()
+		go func() {
+			var payload GatewayPayload
+			if err = json.Unmarshal(msg, &payload); err != nil {
+				slog.Error("Failed to parse gateway payload: " + err.Error())
+				return
 			}
-		case opInvalidSession:
-			slog.Warn("Discord invalidated the gateway session. Attempting to reconnect...")
-			var resume bool
-			_ = json.Unmarshal(*payload.Data, &resume)
-			if err := client.reconnectGateway(resume); err != nil {
-				slog.Error("Failed to reconnect to gateway: " + err.Error())
+
+			switch payload.Opcode {
+			case opDispatch:
+				client.Gateway.sequence.Store(int32(*payload.SequenceNum))
+				client.Events.dispatchEvent(*payload.EventName, *payload.Data)
+			case opHeartbeat:
+				client.heartbeat()
+			case opReconnect:
+				slog.Info("Discord requested a gateway reconnect...")
 				client.CloseGateway()
-			} else {
-				slog.Info("Successfully reconnected to gateway")
-			}
-		case opHeartbeatAck:
-			client.Gateway.heartbeatAcknowledged = true
-		} // HELLO opcode can also be received but is handled by connectGateway before the reader is started
+				if err := client.reconnectGateway(true); err != nil {
+					slog.Info("Failed to reconnect to gateway: " + err.Error())
+				}
+			case opInvalidSession:
+				slog.Warn("Discord invalidated the gateway session. Attempting to reconnect...")
+				var resume bool
+				_ = json.Unmarshal(*payload.Data, &resume)
+				if err := client.reconnectGateway(resume); err != nil {
+					slog.Error("Failed to reconnect to gateway: " + err.Error())
+					client.CloseGateway()
+				} else {
+					slog.Info("Successfully reconnected to gateway")
+				}
+			case opHeartbeatAck:
+				client.Gateway.heartbeatAcknowledged = true
+			} // HELLO opcode can also be received but is handled by connectGateway before the reader is started
+		}()
 	}
 }
 
@@ -322,17 +341,4 @@ func (client *Client) fetchGatewayUrl(attempts int) error {
 		return errors.New("could not fetch gateway url. this is probably an issue on discord's end")
 	}
 	return nil
-}
-
-// readPayload is a blocking operation which waits for a websocket to receive data and parses it as a GatewayPayload
-func readPayload(conn *websocket.Conn) (*GatewayPayload, error) {
-	_, msg, err := conn.ReadMessage()
-	if err != nil {
-		return nil, err
-	}
-	var payload GatewayPayload
-	if err = json.Unmarshal(msg, &payload); err != nil {
-		return nil, err
-	}
-	return &payload, nil
 }
