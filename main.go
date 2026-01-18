@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ElainaBot/config"
 	"ElainaBot/discord"
 	"ElainaBot/elaina"
 	"flag"
@@ -18,27 +19,12 @@ func main() {
 		panic(err)
 	}
 
-	elaina.RegisterEvents(&client.Events)
-	client.Commands = []*discord.ApplicationCommand{
-		{
-			Name:        "echo",
-			Type:        discord.CmdTypeChatInput,
-			Description: "String testing command",
-			Options: []discord.CommandOption{
-				discord.CmdOptString.Create("string", "Testing string option for Devaina", true),
-			},
-			Handler: func(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
-				echo, err := data.OptionByName("string").AsString()
-				if err != nil {
-					return err
-				}
-
-				resp := discord.InteractionResponse{Type: discord.RespTypeChannelMessage, Data: discord.Message{Content: echo, Flags: discord.MsgFlagEphemeral}}
-				_, err = client.SendInteractionResponse(id, token, resp)
-				return err
-			},
-		},
+	if err = config.InitializeConfig(); err != nil {
+		panic(err)
 	}
+
+	elaina.RegisterEvents(&client.Events)
+	elaina.RegisterCommands(client)
 
 	deploy := flag.Bool("deploy_commands", false, "Deploy the bot's application commands")
 	flag.Parse()

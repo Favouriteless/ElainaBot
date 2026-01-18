@@ -33,7 +33,7 @@ var CmdOptMentionable = OptionType[Snowflake]{9}
 var CmdOptFloat64 = OptionType[float64]{10}
 var CmdOptAttachment = OptionType[Attachment]{11}
 
-type CommandHandler func(data ApplicationCommandData, id Snowflake, token string) error
+type CommandHandler func(data ApplicationCommandData, id Snowflake, token string, client *Client) error
 
 // ApplicationCommand represents https://discord.com/developers/docs/interactions/application-commands#application-command-object
 // as well as its responses https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
@@ -46,9 +46,9 @@ type ApplicationCommand struct {
 	Description   string          `json:"description,omitempty"` // 1-100 characters, leave empty if not CHAT_INPUT
 	Options       []CommandOption `json:"options,omitempty"`     // Optional, max 25 length. Do not access this directly, use the helpers instead
 
-	Permissions string         `json:"default_member_permissions,omitempty"` // Nullable (bit set). Annoyingly, discord sends this as a string.
-	Nsfw        bool           `json:"nsfw,omitempty"`                       // Optional, default false
-	Contexts    []int          `json:"contexts,omitempty"`                   // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
+	Permissions int64          `json:"default_member_permissions,string,omitempty"` // Nullable (bit set). Annoyingly, discord sends this as a string.
+	Nsfw        bool           `json:"nsfw,omitempty"`                              // Optional, default false
+	Contexts    []int          `json:"contexts,omitempty"`                          // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
 	Version     Snowflake      `json:"version,omitempty"`
 	Handler     CommandHandler `json:"-"` // If true, the command will be consumed by this handler and not passed to others
 }

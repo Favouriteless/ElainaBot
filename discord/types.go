@@ -1,6 +1,8 @@
 package discord
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 // Snowflake is the identifier type used by discord. It is structured as specified by
 // https://discord.com/developers/docs/reference#snowflakes

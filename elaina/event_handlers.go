@@ -1,6 +1,7 @@
 package elaina
 
 import (
+	"ElainaBot/config"
 	"ElainaBot/discord"
 	"log/slog"
 	"regexp"
@@ -18,7 +19,7 @@ func logMessagesEvent(payload discord.CreateMessagePayload, client *discord.Clie
 
 func respondToNameEvent(payload discord.CreateMessagePayload, client *discord.Client) {
 	if elainaRegex.MatchString(payload.Content) {
-		err := client.CreateReaction(payload.ChannelId, payload.Id, "elainastare:1462288926663512274")
+		err := client.CreateReaction(payload.ChannelId, payload.Id, config.GetString(config.HelloEmoji))
 		if err != nil {
 			slog.Error("Could not say hello to " + payload.Author.Username + ": " + err.Error())
 		} else {

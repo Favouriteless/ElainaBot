@@ -18,7 +18,7 @@ const RespTypeDeferredUpdateMessage = 6
 const RespTypeUpdateMessage = 7
 const RespTypeAutocomplete = 8
 
-func (client *Client) SendInteractionResponse(id Snowflake, token string, response InteractionResponse) (resp *http.Response, err error) {
+func (client *Client) SendInteractionResponse(response InteractionResponse, id Snowflake, token string) (resp *http.Response, err error) {
 	encResponse, err := json.Marshal(response)
 	if err != nil {
 		return
@@ -52,11 +52,6 @@ type AutocompleteResponse struct {
 	Choices []CommandOptionChoice `json:"choices"` // Max 25 length
 }
 
-var defaultErrResponse = InteractionResponse{
-	Type: RespTypeChannelMessage,
-	Data: Message{Content: "An error occurred executing this command :(", Flags: MsgFlagEphemeral},
-}
-
 func handleInteractionCommands(payload InteractionCreatePayload, client *Client) { // Built-in event handler for dispatching application Commands
 	if payload.Type != 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
 		return
@@ -72,9 +67,12 @@ func handleInteractionCommands(payload InteractionCreatePayload, client *Client)
 		if c.Name == command.Name {
 			slog.Info("Dispatching application command: " + c.Name)
 
-			if err := command.Handler(c, payload.Id, payload.Token); err != nil {
+			if err := command.Handler(c, payload.Id, payload.Token, client); err != nil {
 				slog.Error("Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
-				_, _ = client.SendInteractionResponse(payload.Id, payload.Token, defaultErrResponse)
+				_, _ = client.SendInteractionResponse(InteractionResponse{
+					Type: RespTypeChannelMessage,
+					Data: Message{Content: "An error occurred executing this command: " + err.Error(), Flags: MsgFlagEphemeral},
+				}, payload.Id, payload.Token)
 			}
 			return
 		}
