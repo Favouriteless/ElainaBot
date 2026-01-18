@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -22,7 +23,7 @@ func (client *Client) SendInteractionResponse(id Snowflake, token string, respon
 	if err != nil {
 		return
 	}
-	return client.Post(fmt.Sprintf(createInteractionResponseUrl, id, token), encResponse, 3)
+	return client.Post(fmt.Sprintf(createInteractionResponseUrl, id, token), bytes.NewReader(encResponse), 3)
 }
 
 type InteractionResponse struct {
@@ -56,7 +57,7 @@ var defaultErrResponse = InteractionResponse{
 	Data: Message{Content: "An error occurred executing this command :(", Flags: MsgFlagEphemeral},
 }
 
-func (client *Client) handleInteractionCommands(payload InteractionCreatePayload) { // Built-in event handler for dispatching application Commands
+func handleInteractionCommands(payload InteractionCreatePayload, client *Client) { // Built-in event handler for dispatching application Commands
 	if payload.Type != 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
 		return
 	}

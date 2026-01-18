@@ -8,17 +8,17 @@ import (
 // GatewayEventType represents a deserialisation and handler dispatcher for a type of GatewayEvent
 type GatewayEventType[T any] struct {
 	Name     string
-	handlers []func(T)
+	handlers []func(T, *Client)
 }
 
 // Register an event handler to be run when an event of this type is received by the gateway. Multiple handlers can be
 // registered for a single type.
-func (event *GatewayEventType[T]) Register(handler func(T)) {
-	event.handlers = append(event.handlers, handler)
+func (event *GatewayEventType[T]) Register(handler ...func(T, *Client)) {
+	event.handlers = append(event.handlers, handler...)
 }
 
 // dispatch decodes the given json-encoded []byte and dispatches it as an event
-func (event *GatewayEventType[T]) dispatch(raw []byte) {
+func (event *GatewayEventType[T]) dispatch(raw []byte, client *Client) {
 	if len(event.handlers) == 0 {
 		return
 	}
@@ -28,7 +28,7 @@ func (event *GatewayEventType[T]) dispatch(raw []byte) {
 		return
 	}
 	for _, handler := range event.handlers {
-		handler(data)
+		handler(data, client)
 	}
 }
 
@@ -58,23 +58,24 @@ func defaultEvents() EventDispatcher {
 
 // Not really a fan of how this is implemented, but I couldn't figure out how to maintain type safety during event handler
 // registration without doing this.
-func (d *EventDispatcher) dispatchEvent(name string, raw []byte) {
+func (client *Client) dispatchEvent(name string, raw []byte) {
+	d := client.Events
 	switch name {
 	case d.Ready.Name:
-		d.Ready.dispatch(raw)
+		d.Ready.dispatch(raw, client)
 	case d.CreateMessage.Name:
-		d.CreateMessage.dispatch(raw)
+		d.CreateMessage.dispatch(raw, client)
 	case d.UpdateMessage.Name:
-		d.UpdateMessage.dispatch(raw)
+		d.UpdateMessage.dispatch(raw, client)
 	case d.DeleteMessage.Name:
-		d.DeleteMessage.dispatch(raw)
+		d.DeleteMessage.dispatch(raw, client)
 	case d.BulkDeleteMessage.Name:
-		d.BulkDeleteMessage.dispatch(raw)
+		d.BulkDeleteMessage.dispatch(raw, client)
 	case d.ReactionAdd.Name:
-		d.ReactionAdd.dispatch(raw)
+		d.ReactionAdd.dispatch(raw, client)
 	case d.ReactionRemove.Name:
-		d.ReactionRemove.dispatch(raw)
+		d.ReactionRemove.dispatch(raw, client)
 	case d.InteractionCreate.Name:
-		d.InteractionCreate.dispatch(raw)
+		d.InteractionCreate.dispatch(raw, client)
 	}
 }

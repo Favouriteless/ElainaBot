@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"strconv"
@@ -73,11 +72,15 @@ func (gateway *Gateway) SendPayload(payload *GatewayPayload) error {
 }
 
 // CloseGateway closes the active gateway websocket and handles clean-up of background tasks.
-func (client *Client) CloseGateway() {
-	if client.Gateway.conn != nil {
-		client.Gateway.conn.Close()
-	}
+func (client *Client) CloseGateway(resume bool) {
 	client.Gateway.cardiacArrest.Store(true) // Make sure we stop trying to write to the socket. Reader will stop itself.
+	if client.Gateway.conn != nil {
+		if resume {
+			client.Gateway.conn.Close()
+		} else {
+			_ = client.Gateway.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bot is stopping"), time.Now().Add(time.Second))
+		}
+	}
 	client.Gateway.conn = nil
 }
 
@@ -148,13 +151,12 @@ func (client *Client) connectGateway(resume bool) (err error) {
 	client.Gateway.conn.SetCloseHandler(client.handleClosed)
 	defer func() {
 		if err != nil { // Ensure we cancel the write/beater routines & disconnect if handshake fails.
-			client.CloseGateway()
+			client.CloseGateway(false)
 		}
 	}()
 
 	// First payload sent by discord should be a HELLO https://discord.com/developers/docs/events/gateway#connection-lifecycle
 	// UPDATE: It can also in some instances be INVALID SESSION (thanks discord, very glad you documented this (you didn't) )
-
 	_, msg, err := client.Gateway.conn.ReadMessage()
 	if err != nil {
 		slog.Error("Failed to read from gateway: " + err.Error())
@@ -245,7 +247,7 @@ func (client *Client) handleHeartbeats(interval time.Duration) {
 			if !client.Gateway.heartbeatAcknowledged { // If not acknowledged, assume the connection is dead & reconnect
 				if err := client.reconnectGateway(true); err != nil {
 					slog.Error("Failed to reconnect after heartbeat: " + err.Error())
-					client.CloseGateway()
+					client.CloseGateway(false)
 				}
 			} else {
 				client.heartbeat()
@@ -295,12 +297,12 @@ func (client *Client) handleReading(conn *websocket.Conn) {
 			switch payload.Opcode {
 			case opDispatch:
 				client.Gateway.sequence.Store(int32(*payload.SequenceNum))
-				client.Events.dispatchEvent(*payload.EventName, *payload.Data)
+				client.dispatchEvent(*payload.EventName, *payload.Data)
 			case opHeartbeat:
 				client.heartbeat()
 			case opReconnect:
 				slog.Info("Discord requested a gateway reconnect...")
-				client.CloseGateway()
+				client.CloseGateway(true)
 				if err := client.reconnectGateway(true); err != nil {
 					slog.Info("Failed to reconnect to gateway: " + err.Error())
 				}
@@ -310,7 +312,7 @@ func (client *Client) handleReading(conn *websocket.Conn) {
 				_ = json.Unmarshal(*payload.Data, &resume)
 				if err := client.reconnectGateway(resume); err != nil {
 					slog.Error("Failed to reconnect to gateway: " + err.Error())
-					client.CloseGateway()
+					client.CloseGateway(false)
 				} else {
 					slog.Info("Successfully reconnected to gateway")
 				}
@@ -328,14 +330,11 @@ func (client *Client) fetchGatewayUrl(attempts int) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	var data struct{ Url string }
-	if err = json.Unmarshal(body, &data); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return err
 	}
+
 	client.Gateway.url = fmt.Sprintf("%s/?v=%s&encoding=%s", data.Url, apiVersion, apiEncoding)
 	if client.Gateway.url == "" {
 		return errors.New("could not fetch gateway url. this is probably an issue on discord's end")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"ElainaBot/discord"
+	"ElainaBot/elaina"
 	"flag"
 	"log/slog"
 	"os"
@@ -17,9 +18,7 @@ func main() {
 		panic(err)
 	}
 
-	deploy := flag.Bool("deploy_commands", false, "Deploy the bot's application commands")
-	flag.Parse()
-	
+	elaina.RegisterEvents(&client.Events)
 	client.Commands = []*discord.ApplicationCommand{
 		{
 			Name:        "echo",
@@ -41,13 +40,12 @@ func main() {
 		},
 	}
 
+	deploy := flag.Bool("deploy_commands", false, "Deploy the bot's application commands")
+	flag.Parse()
+
 	if *deploy {
 		client.DeployAllCommands()
 	} else {
-		client.Events.CreateMessage.Register(func(payload discord.CreateMessagePayload) {
-			slog.Info("Message received:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
-		})
-
 		if err = client.ConnectGateway(); err != nil {
 			panic(err)
 		}
@@ -58,6 +56,6 @@ func main() {
 		<-sigChan
 
 		slog.Info("Shutting down...")
-		client.CloseGateway()
+		client.CloseGateway(false)
 	}
 }
