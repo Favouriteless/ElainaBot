@@ -43,7 +43,7 @@ func GetString(key string) string {
 	return Get(key).(string)
 }
 
-func InitializeConfig() (err error) {
+func InitialiseConfig() (err error) {
 	slog.Info("Loading config...")
 	config.values = defaultValues()
 

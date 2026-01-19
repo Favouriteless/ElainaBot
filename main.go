@@ -19,19 +19,30 @@ func main() {
 		panic(err)
 	}
 
-	if err = config.InitializeConfig(); err != nil {
+	if err = config.InitialiseConfig(); err != nil {
 		panic(err)
 	}
 
 	elaina.RegisterEvents(&client.Events)
 	elaina.RegisterCommands(client)
 
-	deploy := flag.Bool("deploy_commands", false, "Deploy the bot's application commands")
+	deploy := flag.String("mode", "bot", "Set the running mode: deploy_commands=deploy application commands, deploy_db=deploy database")
 	flag.Parse()
 
-	if *deploy {
+	switch *deploy {
+	case "deploy_commands":
 		client.DeployAllCommands()
-	} else {
+	case "deploy_db":
+		if err = elaina.InitialiseDatabase(); err != nil {
+			panic(err)
+		}
+	case "test":
+		macro, err := elaina.GetMacro("test")
+		if err != nil {
+			panic(err)
+		}
+		slog.Info(macro.Response)
+	default:
 		if err = client.ConnectGateway(); err != nil {
 			panic(err)
 		}
