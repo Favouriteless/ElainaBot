@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -329,6 +331,15 @@ func (client *Client) fetchGatewayUrl(attempts int) error {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		return errors.New("failed to fetch gateway url: " + resp.Status + ": " + string(body))
+	}
 
 	var data struct{ Url string }
 	if err = json.NewDecoder(resp.Body).Decode(&data); err != nil {

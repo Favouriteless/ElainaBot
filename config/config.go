@@ -14,8 +14,8 @@ const (
 
 func defaultValues() map[string]any {
 	return map[string]any{
-		"hello_emoji":         "elainastare:1462288926663512274",
-		"default_hello_emoji": "elainastare:1462288926663512274",
+		"hello_emoji":         "elainastare:1462289034188689468",
+		"default_hello_emoji": "elainastare:1462289034188689468",
 	}
 }
 

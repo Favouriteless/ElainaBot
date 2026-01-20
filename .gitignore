@@ -1,3 +1,6 @@
 .idea
 *.db
 *.json
+build/elaina
+build/image
+build/build.zip
