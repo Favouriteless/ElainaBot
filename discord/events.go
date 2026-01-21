@@ -31,7 +31,7 @@ type Event[T any] struct {
 // EventHandler is called when an event it is registered to fires. Events are called in order.
 type EventHandler[T any] = func(T)
 
-// Register an event handler to be run when an event of this type is received by the gatewayConnection. Multiple handlers can be
+// Register an event handler to be run when an event of this type is received by the gateway. Multiple handlers can be
 // registered for a single type.
 func (event *Event[T]) Register(handler ...EventHandler[T]) {
 	event.handlers = append(event.handlers, handler...)

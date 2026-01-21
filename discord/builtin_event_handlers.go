@@ -5,10 +5,10 @@ import (
 	"log/slog"
 )
 
-// readyEvent updates the gatewayConnection resume URL and session ID
+// readyEvent updates the gateway resuming URL and session ID
 func readyEvent(payload ReadyPayload) {
-	gateway.resumeUrl = payload.ResumeGatewayUrl
-	gateway.sessionId = payload.SessionId
+	gatewayConnection.resumeUrl = payload.ResumeGatewayUrl
+	gatewayConnection.sessionId = payload.SessionId
 	slog.Info("Gateway connection connection established")
 }
 
