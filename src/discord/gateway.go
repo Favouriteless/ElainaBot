@@ -67,7 +67,7 @@ func ListenGateway(intents int, quit <-chan interface{}) {
 		for {
 			reconnect, err := gatewayConnection.connect()
 			if err != nil {
-				slog.Error("Error connecting to gateway: " + err.Error())
+				slog.Error("Gateway connection error: " + err.Error())
 			}
 			if !reconnect {
 				break
@@ -112,27 +112,16 @@ func (gateway *gateway) connect() (reconnect bool, err error) {
 	gateway.cardiacArrest.Store(true) // Stop children & reset the connection state after the websocket disconnects
 	gateway.wg.Wait()
 
-	if err == nil { // If no error happened, the reader must have been told to reconnect
+	if err == nil { // No error means the reader received a reconnect request
 		return true, nil
 	}
 
-	if errors.Is(err, io.EOF) { // EOF means a non-exceptional websocket closure, delegate to the close frame instead
-		gateway.resuming = true // All close codes assume RESUME or disconnect
-
-		switch closeCode {
-		case closeUnknownError:
-			return true, nil
-		case closeNotAuthenticated:
-			return true, nil
-		case closeInvalidSequence:
-			return true, nil
-		case closeRateLimited:
-			return true, nil
-		case closeTimedOut:
-			return true, nil
-		}
+	if closeCode == closeUnknownError || closeCode == closeNotAuthenticated || closeCode == closeInvalidSequence ||
+		closeCode == closeRateLimited || closeCode == closeTimedOut { // If not one of these, we should be safe and not attempt to resume
+		gateway.resuming = true
 	}
-	return false, err
+
+	return true, err
 }
 
 // readUntilClosed reads all payloads from a websocket connection and dispatches them to the event handler.
@@ -142,14 +131,9 @@ func (gateway *gateway) readUntilClosed(resuming bool) (shouldResume bool, err e
 		if gateway.cardiacArrest.Load() {
 			return false, nil
 		}
-		_, msg, err := gateway.conn.ReadMessage()
-		if err != nil {
-			return false, err
-		}
-
 		var payload gatewayPayload
-		if err = json.Unmarshal(msg, &payload); err != nil {
-			panic(err) // Should never be hit
+		if err := gateway.conn.ReadJSON(&payload); err != nil {
+			return false, err
 		}
 
 		switch payload.Opcode {
@@ -260,6 +244,7 @@ func (gateway *gateway) heartbeat(interval time.Duration) {
 			if !gateway.heartbeatAcknowledged {
 				slog.Error("Heartbeat not acknowledged, terminating connection to resume")
 				gateway.resuming = true
+				_ = gateway.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseServiceRestart, ""), time.Now().Add(time.Second))
 				gateway.conn.Close()
 				return
 			}

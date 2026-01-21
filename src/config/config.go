@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+const configPath = "data/config.json"
+
 const (
 	HelloEmoji        = "hello_emoji"
 	DefaultHelloEmoji = "default_hello_emoji"
@@ -66,7 +68,7 @@ func InitializeConfig() (err error) {
 	slog.Info("Loading config...")
 	config.values = defaultValues()
 
-	file, err := os.ReadFile("config.json")
+	file, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			slog.Info("No config file found, using default values instead")
@@ -108,5 +110,5 @@ func SaveConfig() error {
 		return err
 	}
 	config.mutex.RUnlock()
-	return os.WriteFile("config.json", enc, 0660)
+	return os.WriteFile(configPath, enc, 0660)
 }

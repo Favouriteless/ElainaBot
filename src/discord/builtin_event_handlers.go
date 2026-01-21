@@ -9,7 +9,7 @@ import (
 func readyEvent(payload ReadyPayload) {
 	gatewayConnection.resumeUrl = payload.ResumeGatewayUrl
 	gatewayConnection.sessionId = payload.SessionId
-	slog.Info("Gateway connection connection established")
+	slog.Info("Gateway connection established")
 }
 
 // interactionCreateEvent dispatches ApplicationCommands
