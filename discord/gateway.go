@@ -47,6 +47,7 @@ type gatewayConnection struct {
 	sequence  atomic.Int32 // The last sequence number the client received from the gateway
 
 	heartbeatAcknowledged bool // Update to false when the client sends a sendHeartbeat. If discord doesn't acknowledge before the next sendHeartbeat, reconnect.
+	disconnecting         bool // Stops the close handler from hanging the client is the one requesting a disconnect
 }
 
 // InitializeGateway initializes the gatewayConnection struct and attempts to send a connection request to the API.
@@ -87,23 +88,29 @@ func (gateway *gatewayConnection) SendPayload(payload *gatewayPayload) error {
 // disconnect closes the active gateway websocket and handles clean-up of background tasks. If forReconnect is true, disconnect
 // will not send a disconnect frame so discord keeps the session active.
 func (gateway *gatewayConnection) disconnect(forReconnect bool) {
+	gateway.disconnecting = true
 	gateway.cardiacArrest.Store(true) // Make sure we stop trying to write to the socket. Reader will stop itself.
-	gateway.wg.Wait()
 	if !forReconnect {
 		gateway.sequence.Store(0)
 	}
 	if gateway.conn != nil {
+
 		if forReconnect {
 			gateway.conn.Close()
 		} else {
 			_ = gateway.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
 		}
 	}
+	gateway.wg.Wait()
 	gateway.conn = nil
 }
 
 // handleClosed handles clean-up of background tasks after the websocket connection was closed by discord.
 func (gateway *gatewayConnection) handleClosed(code int, text string) error {
+	if gateway.disconnecting {
+		return nil // If we don't do this, the wait group gets called again and waits forever
+	}
+
 	reconnect := code == closeUnknownError || code == closeNotAuthenticated || code == closeInvalidSequence || code == closeRateLimited || code == closeTimedOut
 	gateway.disconnect(reconnect)
 	slog.Info("Gateway connection closed: " + strconv.Itoa(code))
@@ -133,9 +140,12 @@ func (gateway *gatewayConnection) connect(resume bool) error {
 	if err != nil {
 		return err
 	}
+	slog.Info("Websocket created")
 	gateway.conn.SetCloseHandler(gateway.handleClosed) // Handles behaviour when discord initiates a disconnect
 
+	gateway.cardiacArrest.Store(false)
 	gateway.wg.Add(2)
+
 	go gateway.handleWriting()
 	go gateway.handleReading(resume)
 	return nil
@@ -155,7 +165,7 @@ func (gateway *gatewayConnection) identify(resume bool) {
 		if err = gateway.SendPayload(&gatewayPayload{Opcode: opResume, Data: (*json.RawMessage)(&id)}); err != nil {
 			panic(err) // Should never be hit
 		}
-		slog.Info("Resuming gateway connection...")
+		slog.Info("Resuming gateway connection")
 		return
 	}
 	enc, err := json.Marshal(IdentifyPayload{
@@ -169,7 +179,7 @@ func (gateway *gatewayConnection) identify(resume bool) {
 	if err = gateway.SendPayload(&gatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&enc)}); err != nil {
 		panic(err) // Should never be hit
 	}
-	slog.Info("Identifying gateway connection...")
+	slog.Info("Identifying gateway connection")
 }
 
 func (gateway *gatewayConnection) getConnectUrl(resume bool) (string, error) {
@@ -258,7 +268,7 @@ func (gateway *gatewayConnection) handleReading(resume bool) {
 		}
 		_, msg, err := gateway.conn.ReadMessage()
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
+			if errors.Is(err, net.ErrClosed) || gateway.disconnecting { // Little ugly but it works
 				return
 			}
 			slog.Error("Failed to read from gateway connection: " + err.Error())
@@ -276,6 +286,7 @@ func (gateway *gatewayConnection) handleReading(resume bool) {
 				if err = json.Unmarshal(*payload.Data, &hello); err != nil {
 					panic(err) // Should never be hit
 				}
+				slog.Info("Starting heartbeats")
 				gateway.wg.Add(1)
 				go gateway.heartbeat(time.Millisecond * time.Duration(hello.HeartbeatInterval))
 				gateway.identify(resume)
@@ -285,7 +296,7 @@ func (gateway *gatewayConnection) handleReading(resume bool) {
 			case opHeartbeat:
 				gateway.sendHeartbeat()
 			case opReconnect:
-				slog.Info("Discord requested a gateway reconnect...")
+				slog.Info("Discord requested a gateway reconnect")
 				defer func() { // Defer so the wait group can finish first
 					gateway.disconnect(true)
 					if err := gateway.connect(true); err != nil {
