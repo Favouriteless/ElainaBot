@@ -17,7 +17,7 @@ const ( // Payload Opcodes as specified by https://discord.com/developers/docs/t
 
 // HelloPayload is a non-standard event, it doesn't have a type. Opcode 1 instead
 type HelloPayload struct {
-	HeartbeatInterval int `json:"heartbeat_interval"`
+	HeartbeatInterval int64 `json:"heartbeat_interval"`
 }
 
 // IdentifyPayload is a non-standard event, it doesn't have a type. Opcode 2 instead
@@ -34,8 +34,7 @@ type ResumePayload struct {
 	SequenceNum int32  `json:"seq"`
 }
 
-// ReadyPayload is sent by discord after the client has successfully identified itself and is ready to receive events. It
-// also has a built-in handler for fetching the gateway resume details.
+// ReadyPayload is sent by discord after the client has successfully identified itself and is ready to receive events.
 // https://discord.com/developers/docs/events/gateway-events#ready
 type ReadyPayload struct {
 	ApiVersion       int         `json:"v"`
@@ -54,7 +53,7 @@ func (p ReadyPayload) Name() string {
 // https://discord.com/developers/docs/events/gateway-events#message-create
 type CreateMessagePayload struct {
 	Message
-	GuildId  *Snowflake   `json:"guild_id"` // Optional
+	GuildId  Snowflake    `json:"guild_id"` // Optional
 	Member   *GuildMember `json:"member"`   // Optional
 	Mentions []User
 }
@@ -67,7 +66,7 @@ func (p CreateMessagePayload) Name() string {
 // https://discord.com/developers/docs/events/gateway-events#message-update
 type UpdateMessagePayload struct {
 	Message
-	GuildId  *Snowflake   `json:"guild_id"` // Optional
+	GuildId  Snowflake    `json:"guild_id"` // Optional
 	Member   *GuildMember `json:"member"`   // Optional
 	Mentions []User
 }
@@ -75,9 +74,9 @@ type UpdateMessagePayload struct {
 // DeleteMessagePayload is sent by discord when a single message is deleted.
 // https://discord.com/developers/docs/events/gateway-events#message-delete
 type DeleteMessagePayload struct {
-	Id        Snowflake  `json:"id"`
-	ChannelId Snowflake  `json:"channel_id"`
-	GuildId   *Snowflake `json:"guild_id"` // Optional
+	Id        Snowflake `json:"id"`
+	ChannelId Snowflake `json:"channel_id"`
+	GuildId   Snowflake `json:"guild_id"` // Optional
 }
 
 // BulkDeleteMessagePayload is sent by discord when a multiple messages are deleted.
@@ -85,7 +84,7 @@ type DeleteMessagePayload struct {
 type BulkDeleteMessagePayload struct {
 	Ids       []Snowflake `json:"ids"`
 	ChannelId Snowflake   `json:"channel_id"`
-	GuildId   *Snowflake  `json:"guild_id"` // Optional
+	GuildId   Snowflake   `json:"guild_id"` // Optional
 }
 
 // ReactionAddPayload is sent by discord when a user adds a reaction to a message.
@@ -94,10 +93,10 @@ type ReactionAddPayload struct {
 	UserId          Snowflake    `json:"user_id"`
 	ChannelId       Snowflake    `json:"channel_id"`
 	MessageId       Snowflake    `json:"message_id"`
-	GuildId         *Snowflake   `json:"guild_id"` // Optional
+	GuildId         Snowflake    `json:"guild_id"` // Optional
 	Member          *GuildMember `json:"member"`   // Optional
 	Emoji           Emoji        `json:"emoji"`
-	MessageAuthorId *Snowflake   `json:"message_author_id"` // Optional
+	MessageAuthorId Snowflake    `json:"message_author_id"` // Optional
 	Burst           bool         `json:"burst"`
 	BurstColors     []string     `json:"burst_colors"` // Optional
 	Type            int          `json:"type"`
@@ -106,14 +105,36 @@ type ReactionAddPayload struct {
 // ReactionRemovePayload is sent by discord when a user removes a reaction from a message.
 // https://discord.com/developers/docs/events/gateway-events#message-reaction-remove
 type ReactionRemovePayload struct {
-	UserId    Snowflake  `json:"user_id"`
-	ChannelId Snowflake  `json:"channel_id"`
-	MessageId Snowflake  `json:"message_id"`
-	GuildId   *Snowflake `json:"guild_id"` // Optional
-	Emoji     Emoji      `json:"emoji"`
-	Burst     bool       `json:"burst"`
-	Type      int        `json:"type"`
+	UserId    Snowflake `json:"user_id"`
+	ChannelId Snowflake `json:"channel_id"`
+	MessageId Snowflake `json:"message_id"`
+	GuildId   Snowflake `json:"guild_id"` // Optional
+	Emoji     Emoji     `json:"emoji"`
+	Burst     bool      `json:"burst"`
+	Type      int       `json:"type"`
 }
 
 // InteractionCreatePayload is sent by discord when a user creates an interaction (e.g. via a slash command)
 type InteractionCreatePayload = Interaction
+
+// UpdateChannelPayload is sent by discord when a guild channel is updated.
+// https://discord.com/developers/docs/events/gateway-events#channel-update
+type UpdateChannelPayload = Channel
+
+// DeleteChannelPayload is sent by discord when a guild channel is deleted.
+// https://discord.com/developers/docs/events/gateway-events#channel-delete
+type DeleteChannelPayload = Channel
+
+// UpdateRolePayload is sent by discord when a guild channel is updated.
+// https://discord.com/developers/docs/events/gateway-events#guild-role-update
+type UpdateRolePayload struct {
+	GuildId Snowflake `json:"guild_id"`
+	Role    Role      `json:"role"`
+}
+
+// DeleteRolePayload is sent by discord when a guild channel is deleted.
+// https://discord.com/developers/docs/events/gateway-events#guild-role-delete
+type DeleteRolePayload struct {
+	GuildId Snowflake `json:"guild_id"`
+	RoleId  Snowflake `json:"role_id"`
+}

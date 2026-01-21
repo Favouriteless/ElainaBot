@@ -2,11 +2,34 @@ package discord
 
 import (
 	"encoding/json"
+	"strconv"
 )
 
-// Snowflake is the identifier type used by discord. It is structured as specified by
-// https://discord.com/developers/docs/reference#snowflakes
-type Snowflake = string
+// StringInt64 is used to cleanly represent the 64-bit ints sent by discord API as they are serialized as strings
+type StringInt64 uint64
+type Snowflake = StringInt64
+type Permissions = StringInt64
+
+func (s *StringInt64) String() string {
+	return strconv.FormatUint(uint64(*s), 10)
+}
+
+func (s *StringInt64) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	id, err := strconv.ParseUint(str, 10, 64)
+	if err != nil {
+		return err
+	}
+	*s = StringInt64(id)
+	return nil
+}
+
+func (s *StringInt64) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
 
 type ConnectionProperties struct {
 	Os      string `json:"os"`
@@ -33,7 +56,7 @@ type User struct {
 	Discriminator        string                `json:"discriminator"`
 	GlobalName           string                `json:"global_name"` // Nullable
 	Avatar               string                `json:"avatar"`
-	Bot                  *bool                 `json:"bot"`                    // Optional
+	Bot                  bool                  `json:"bot"`
 	System               *bool                 `json:"system"`                 // Optional
 	MfaEnabled           *bool                 `json:"mfa_enabled"`            // Optional
 	Banner               string                `json:"banner"`                 // Optional, nullable
@@ -74,7 +97,7 @@ type UserPrimaryGuild struct {
 	Badge   string     `json:"badge"`             // Nullable
 }
 
-type Application struct {
+type App struct {
 	Id          Snowflake `json:"id"`
 	Name        string    `json:"name"`
 	Icon        string    `json:"icon"` // Nullable
@@ -103,7 +126,7 @@ type Message struct {
 	WebhookId Snowflake `json:"webhook_id,omitempty"` // Optional
 	Type      int       `json:"type"`
 	// Activity
-	Application       *Application       `json:"application,omitempty"`        // Optional
+	Application       *App               `json:"application,omitempty"`        // Optional
 	ApplicationId     Snowflake          `json:"application_id,omitempty"`     // Optional
 	Flags             int                `json:"flags,omitempty"`              // Optional
 	MessageReference  []MessageReference `json:"message_reference,omitempty"`  // Optional
@@ -122,18 +145,18 @@ type Message struct {
 
 // Role represents https://discord.com/developers/docs/topics/permissions#role-object
 type Role struct {
-	Id          Snowflake  `json:"id"`
-	Name        string     `json:"name"`
-	Colors      RoleColors `json:"colors"`
-	Hoist       bool       `json:"hoist"`
-	Icon        string     `json:"icon"`          // Optional, nullable
-	Emoji       string     `json:"unicode_emoji"` // Optional, nullable
-	Position    int        `json:"position"`
-	Permissions string     `json:"permissions"`
-	Managed     bool       `json:"managed"`
-	Mentionable bool       `json:"mentionable"`
-	Tags        *RoleTags  `json:"tags"` // Optional
-	Flags       int        `json:"flags"`
+	Id          Snowflake   `json:"id"`
+	Name        string      `json:"name"`
+	Colors      RoleColors  `json:"colors"`
+	Hoist       bool        `json:"hoist"`
+	Icon        string      `json:"icon"`          // Optional, nullable
+	Emoji       string      `json:"unicode_emoji"` // Optional, nullable
+	Position    int         `json:"position"`
+	Permissions Permissions `json:"permissions"`
+	Managed     bool        `json:"managed"`
+	Mentionable bool        `json:"mentionable"`
+	Tags        *RoleTags   `json:"tags"` // Optional
+	Flags       int         `json:"flags"`
 }
 
 // RoleColors represents https://discord.com/developers/docs/topics/permissions#role-object-role-colors-object
@@ -169,7 +192,7 @@ type Attachment struct {
 	Description string    `json:"description"`
 	ContentType string    `json:"content_type"`
 	Size        int       `json:"size"`
-	URL         string    `json:"url"`
+	URL         string    `json:"Url"`
 	ProxyUrl    string    `json:"proxy_url"`
 	Height      *int      `json:"height"`
 	Width       *int      `json:"width"`
@@ -261,22 +284,22 @@ type MessageCall struct {
 type Channel struct {
 	Id                            Snowflake        `json:"id"`
 	Type                          int              `json:"type"`
-	GuildId                       *Snowflake       `json:"guild_id"`                           // Optional
+	GuildId                       Snowflake        `json:"guild_id"`                           // Optional
 	Position                      *int             `json:"position"`                           // Optional
 	PermissionOverwrites          []Overwrite      `json:"permission_overwrites"`              // Optional
 	Name                          string           `json:"name"`                               // Optional, nullable
 	Topic                         string           `json:"topic"`                              // Optional, nullable
 	Nsfw                          *bool            `json:"nsfw"`                               // Optional
-	LastMessageId                 *Snowflake       `json:"last_message_id"`                    // Optional, nullable
+	LastMessageId                 Snowflake        `json:"last_message_id"`                    // Optional, nullable
 	Bitrate                       *int             `json:"bitrate"`                            // Optional
 	UserLimit                     *int             `json:"user_limit"`                         // Optional
 	RateLimitPerUser              *int             `json:"rate_limit_per_user"`                // Optional
 	Recipients                    []User           `json:"recipients"`                         // Optional
 	Icon                          string           `json:"icon"`                               // Optional, nullable
-	OwnerId                       *Snowflake       `json:"owner_id"`                           // Optional
-	ApplicationId                 *Snowflake       `json:"application_id"`                     // Optional
+	OwnerId                       Snowflake        `json:"owner_id"`                           // Optional
+	ApplicationId                 Snowflake        `json:"application_id"`                     // Optional
 	Managed                       *bool            `json:"managed"`                            // Optional
-	ParentId                      *Snowflake       `json:"parent_id"`                          // Optional, nullable
+	ParentId                      Snowflake        `json:"parent_id"`                          // Optional, nullable
 	LastPinTimestamp              string           `json:"last_pin_timestamp"`                 // Optional, nullable
 	RtcRegion                     *string          `json:"rtc_region"`                         // Optional, nullable
 	VideoQualityMode              int              `json:"video_quality_mode"`                 // Optional
@@ -285,7 +308,7 @@ type Channel struct {
 	ThreadMetadata                *ThreadMetadata  `json:"thread_metadata"`                    // Optional
 	Member                        *ThreadMember    `json:"member"`                             // Optional
 	DefaultAutoArchiveDuration    *int             `json:"default_auto_archive_duration"`      // Optional
-	Permissions                   string           `json:"permissions"`                        // Optional
+	Permissions                   Permissions      `json:"permissions"`                        // Optional
 	Flags                         *int             `json:"flags"`                              // Optional
 	TotalMessageSent              *int             `json:"total_message_sent"`                 // Optional
 	AvailableTags                 []ForumTag       `json:"available_tags"`                     // Optional
@@ -298,25 +321,25 @@ type Channel struct {
 
 // Overwrite represents https://discord.com/developers/docs/resources/channel#overwrite-object
 type Overwrite struct {
-	Id    Snowflake `json:"id"`
-	Type  int       `json:"type"`
-	Allow string    `json:"allow"`
-	Deny  string    `json:"deny"`
+	Id    Snowflake   `json:"id"`
+	Type  int         `json:"type"`
+	Allow Permissions `json:"allow"`
+	Deny  Permissions `json:"deny"`
 }
 
 // ForumTag represents https://discord.com/developers/docs/resources/channel#forum-tag-object
 type ForumTag struct {
-	Id        Snowflake  `json:"id"`
-	Name      string     `json:"name"`
-	Moderated bool       `json:"moderated"`
-	EmojiId   *Snowflake `json:"emoji_id"`   // Nullable
-	EmojiName string     `json:"emoji_name"` // Nullable
+	Id        Snowflake `json:"id"`
+	Name      string    `json:"name"`
+	Moderated bool      `json:"moderated"`
+	EmojiId   Snowflake `json:"emoji_id"`   // Nullable
+	EmojiName string    `json:"emoji_name"` // Nullable
 }
 
 // DefaultReaction represents https://discord.com/developers/docs/resources/channel#default-reaction-object
 type DefaultReaction struct {
-	EmojiId   *Snowflake `json:"emoji_id"`   // Optional, nullable
-	EmojiName string     `json:"emoji_name"` // Optional, nullable
+	EmojiId   Snowflake `json:"emoji_id"`   // Optional, nullable
+	EmojiName string    `json:"emoji_name"` // Optional, nullable
 }
 
 // GuildMember represents https://discord.com/developers/docs/resources/guild#guild-member-object
@@ -332,15 +355,15 @@ type GuildMember struct {
 	Mute                       bool                  `json:"mute"`
 	Flags                      int                   `json:"flags"`
 	Pending                    *bool                 `json:"pending"`                      // Optional
-	Permissions                string                `json:"permissions"`                  // Optional
+	Permissions                Permissions           `json:"permissions"`                  // Optional
 	CommunicationDisabledUntil string                `json:"communication_disabled_until"` // Optional
 	AvatarDecorationData       *AvatarDecorationData // Optional, nullable
 }
 
 // ThreadMember represents https://discord.com/developers/docs/resources/channel#thread-member-object
 type ThreadMember struct {
-	Id            *Snowflake   `json:"id"`      // Optional (thread ID)
-	UserId        *Snowflake   `json:"user_id"` // Optional
+	Id            Snowflake    `json:"id"`      // Optional (thread ID)
+	UserId        Snowflake    `json:"user_id"` // Optional
 	JoinTimestamp string       `json:"join_timestamp"`
 	Flags         int          `json:"flags"`
 	Member        *GuildMember `json:"member"` // Optional
@@ -363,9 +386,9 @@ type Interaction struct {
 	Type                int              `json:"type"` // 1 = PING, 2 = APPLICATION_COMMAND, 3 = MESSAGE_COMPONENT, 4 = APPLICATION_COMMAND_AUTOCOMPLETE, 5 = MODAL_SUBMIT
 	Data                *json.RawMessage `json:"data"` // Always present on application Commands, message components & model submit. Optional for future proofing.
 	Guild               *Guild           `json:"guild"`
-	GuildId             *Snowflake       `json:"guild_id"`
+	GuildId             Snowflake        `json:"guild_id"`
 	Channel             *Channel         `json:"channel"`
-	ChannelId           *Snowflake       `json:"channel_id"`
+	ChannelId           Snowflake        `json:"channel_id"`
 	Member              *GuildMember     `json:"member"`
 	User                *User            `json:"user"`
 	Token               string           `json:"token"` // Continuation token
@@ -398,8 +421,8 @@ type PollMedia struct {
 
 // PollAnswer represents https://discord.com/developers/docs/resources/poll#poll-answer-object-poll-answer-object-structure
 type PollAnswer struct {
-	AnswerId  *Snowflake `json:"answer_id,omitempty"` // Only sent by discord. Do not send.
-	PollMedia PollMedia  `json:"poll_media"`
+	AnswerId  Snowflake `json:"answer_id,omitempty"` // Only sent by discord. Do not send.
+	PollMedia PollMedia `json:"poll_media"`
 }
 
 // PollResults represents https://discord.com/developers/docs/resources/poll#poll-results-object-poll-results-object-structure
@@ -412,4 +435,14 @@ type PollResults struct {
 type PollAnswerCount struct {
 	Id    int `json:"id"`
 	Count int `json:"count"`
+}
+
+// ResolvedData represents https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-resolved-data-structure
+type ResolvedData struct {
+	Users       map[Snowflake]User        `json:"users"`
+	Members     map[Snowflake]GuildMember `json:"members"`
+	Roles       map[Snowflake]Role        `json:"roles"`
+	Channels    map[Snowflake]Channel     `json:"channels"`
+	Messages    map[Snowflake]Message     `json:"messages"`
+	Attachments map[Snowflake]Attachment  `json:"discord.Attachments"`
 }

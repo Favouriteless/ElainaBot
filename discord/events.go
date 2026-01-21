@@ -5,21 +5,56 @@ import (
 	"log/slog"
 )
 
-// GatewayEventType represents a deserialisation and handler dispatcher for a type of GatewayEvent
-type GatewayEventType[T any] struct {
-	Name     string
-	handlers []func(T, *Client)
+var Events = &EventDispatcher{
+	Ready:             Event[ReadyPayload]{Name: "READY", builtin: []EventHandler[ReadyPayload]{readyEvent}},
+	CreateMessage:     Event[CreateMessagePayload]{Name: "MESSAGE_CREATE"},
+	UpdateMessage:     Event[UpdateMessagePayload]{Name: "MESSAGE_UPDATE", builtin: []EventHandler[UpdateMessagePayload]{updateMessageEvent}},
+	DeleteMessage:     Event[DeleteMessagePayload]{Name: "MESSAGE_DELETE", builtin: []EventHandler[DeleteMessagePayload]{deleteMessageEvent}},
+	BulkDeleteMessage: Event[BulkDeleteMessagePayload]{Name: "MESSAGE_DELETE_BULK"},
+	ReactionAdd:       Event[ReactionAddPayload]{Name: "MESSAGE_REACTION_ADD"},
+	ReactionRemove:    Event[ReactionRemovePayload]{Name: "MESSAGE_REACTION_REMOVE"},
+	InteractionCreate: Event[InteractionCreatePayload]{Name: "INTERACTION_CREATE", builtin: []EventHandler[InteractionCreatePayload]{interactionCreateEvent}},
+	UpdateChannel:     Event[UpdateChannelPayload]{Name: "CHANNEL_UPDATE", builtin: []EventHandler[UpdateChannelPayload]{updateChannelEvent}},
+	DeleteChannel:     Event[DeleteChannelPayload]{Name: "CHANNEL_UPDATE", builtin: []EventHandler[DeleteChannelPayload]{deleteChannelEvent}},
+	UpdateRole:        Event[UpdateRolePayload]{Name: "GUILD_ROLE_UPDATE", builtin: []EventHandler[UpdateRolePayload]{updateRoleEvent}},
+	DeleteRole:        Event[DeleteRolePayload]{Name: "GUILD_ROLE_UPDATE", builtin: []EventHandler[DeleteRolePayload]{deleteRoleEvent}},
 }
 
-// Register an event handler to be run when an event of this type is received by the gateway. Multiple handlers can be
+// Event represents a deserialization and handler dispatcher for a type of Event. Built-in handlers will
+// always run LAST, as they may modify a ResourceCache.
+type Event[T any] struct {
+	Name     string
+	handlers []EventHandler[T]
+	builtin  []EventHandler[T]
+}
+
+// EventHandler is called when an event it is registered to fires. Events are called in order.
+type EventHandler[T any] = func(T)
+
+// Register an event handler to be run when an event of this type is received by the gatewayConnection. Multiple handlers can be
 // registered for a single type.
-func (event *GatewayEventType[T]) Register(handler ...func(T, *Client)) {
+func (event *Event[T]) Register(handler ...EventHandler[T]) {
 	event.handlers = append(event.handlers, handler...)
 }
 
+type EventDispatcher struct {
+	Ready             Event[ReadyPayload]
+	CreateMessage     Event[CreateMessagePayload]
+	UpdateMessage     Event[UpdateMessagePayload]
+	DeleteMessage     Event[DeleteMessagePayload]
+	BulkDeleteMessage Event[BulkDeleteMessagePayload]
+	ReactionAdd       Event[ReactionAddPayload]
+	ReactionRemove    Event[ReactionRemovePayload]
+	InteractionCreate Event[InteractionCreatePayload]
+	UpdateChannel     Event[UpdateChannelPayload]
+	DeleteChannel     Event[DeleteChannelPayload]
+	UpdateRole        Event[UpdateRolePayload]
+	DeleteRole        Event[DeleteRolePayload]
+}
+
 // dispatch decodes the given json-encoded []byte and dispatches it as an event
-func (event *GatewayEventType[T]) dispatch(raw []byte, client *Client) {
-	if len(event.handlers) == 0 {
+func (event *Event[T]) dispatch(raw []byte) {
+	if len(event.handlers) == 0 && len(event.builtin) == 0 {
 		return
 	}
 	var data T
@@ -28,54 +63,40 @@ func (event *GatewayEventType[T]) dispatch(raw []byte, client *Client) {
 		return
 	}
 	for _, handler := range event.handlers {
-		handler(data, client)
+		handler(data)
 	}
-}
-
-type EventDispatcher struct {
-	Ready             GatewayEventType[ReadyPayload]
-	CreateMessage     GatewayEventType[CreateMessagePayload]
-	UpdateMessage     GatewayEventType[UpdateMessagePayload]
-	DeleteMessage     GatewayEventType[DeleteMessagePayload]
-	BulkDeleteMessage GatewayEventType[BulkDeleteMessagePayload]
-	ReactionAdd       GatewayEventType[ReactionAddPayload]
-	ReactionRemove    GatewayEventType[ReactionRemovePayload]
-	InteractionCreate GatewayEventType[InteractionCreatePayload]
-}
-
-func defaultEvents() EventDispatcher {
-	return EventDispatcher{ // Do not use explicit names here, we want the compiler to complain if an event is missing
-		Ready:             GatewayEventType[ReadyPayload]{Name: "READY"},
-		CreateMessage:     GatewayEventType[CreateMessagePayload]{Name: "MESSAGE_CREATE"},
-		UpdateMessage:     GatewayEventType[UpdateMessagePayload]{Name: "MESSAGE_UPDATE"},
-		DeleteMessage:     GatewayEventType[DeleteMessagePayload]{Name: "MESSAGE_DELETE"},
-		BulkDeleteMessage: GatewayEventType[BulkDeleteMessagePayload]{Name: "MESSAGE_DELETE_BULK"},
-		ReactionAdd:       GatewayEventType[ReactionAddPayload]{Name: "MESSAGE_REACTION_ADD"},
-		ReactionRemove:    GatewayEventType[ReactionRemovePayload]{Name: "MESSAGE_REACTION_REMOVE"},
-		InteractionCreate: GatewayEventType[InteractionCreatePayload]{Name: "INTERACTION_CREATE"},
+	for _, handler := range event.builtin {
+		handler(data)
 	}
 }
 
 // Not really a fan of how this is implemented, but I couldn't figure out how to maintain type safety during event handler
 // registration without doing this.
-func (client *Client) dispatchEvent(name string, raw []byte) {
-	d := client.Events
+func dispatchEvent(name string, raw []byte) {
 	switch name {
-	case d.Ready.Name:
-		d.Ready.dispatch(raw, client)
-	case d.CreateMessage.Name:
-		d.CreateMessage.dispatch(raw, client)
-	case d.UpdateMessage.Name:
-		d.UpdateMessage.dispatch(raw, client)
-	case d.DeleteMessage.Name:
-		d.DeleteMessage.dispatch(raw, client)
-	case d.BulkDeleteMessage.Name:
-		d.BulkDeleteMessage.dispatch(raw, client)
-	case d.ReactionAdd.Name:
-		d.ReactionAdd.dispatch(raw, client)
-	case d.ReactionRemove.Name:
-		d.ReactionRemove.dispatch(raw, client)
-	case d.InteractionCreate.Name:
-		d.InteractionCreate.dispatch(raw, client)
+	case Events.Ready.Name:
+		Events.Ready.dispatch(raw)
+	case Events.CreateMessage.Name:
+		Events.CreateMessage.dispatch(raw)
+	case Events.UpdateMessage.Name:
+		Events.UpdateMessage.dispatch(raw)
+	case Events.DeleteMessage.Name:
+		Events.DeleteMessage.dispatch(raw)
+	case Events.BulkDeleteMessage.Name:
+		Events.BulkDeleteMessage.dispatch(raw)
+	case Events.ReactionAdd.Name:
+		Events.ReactionAdd.dispatch(raw)
+	case Events.ReactionRemove.Name:
+		Events.ReactionRemove.dispatch(raw)
+	case Events.InteractionCreate.Name:
+		Events.InteractionCreate.dispatch(raw)
+	case Events.UpdateChannel.Name:
+		Events.UpdateChannel.dispatch(raw)
+	case Events.DeleteChannel.Name:
+		Events.DeleteChannel.dispatch(raw)
+	case Events.UpdateRole.Name:
+		Events.UpdateRole.dispatch(raw)
+	case Events.DeleteRole.Name:
+		Events.DeleteRole.dispatch(raw)
 	}
 }

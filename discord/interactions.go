@@ -3,37 +3,34 @@ package discord
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"log/slog"
-	"net/http"
 )
 
-const createInteractionResponseUrl = apiUrl + "/interactions/%s/%s/callback"
-
 // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-callback-type
+const (
+	RespTypeChannelMessage         = 4
+	RespTypeDeferredChannelMessage = 5
+	RespTypeDeferredUpdateMessage  = 6
+	RespTypeUpdateMessage          = 7
+	RespTypeAutocomplete           = 8
+)
 
-const RespTypeChannelMessage = 4
-const RespTypeDeferredChannelMessage = 5
-const RespTypeDeferredUpdateMessage = 6
-const RespTypeUpdateMessage = 7
-const RespTypeAutocomplete = 8
-
-func (client *Client) SendInteractionResponse(response InteractionResponse, id Snowflake, token string) (resp *http.Response, err error) {
+func SendInteractionResponse(response InteractionResponse, id Snowflake, token string) error {
 	encResponse, err := json.Marshal(response)
 	if err != nil {
-		return
+		return err
 	}
-	return client.Post(fmt.Sprintf(createInteractionResponseUrl, id, token), bytes.NewReader(encResponse), 3)
+	resp, err := Post(Url("interactions", id.String(), token, "callback"), bytes.NewReader(encResponse))
+	_ = resp.Body.Close()
+	return err
+}
+
+func SendInteractionMessageResponse(message Message, id Snowflake, token string) error {
+	return SendInteractionResponse(InteractionResponse{Type: RespTypeChannelMessage, Data: message}, id, token)
 }
 
 type InteractionResponse struct {
 	Type int         `json:"type"`
 	Data interface{} `json:"data"`
-}
-
-// InteractionResponseType is a type safe factory for representing https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-callback-type
-type InteractionResponseType[T any] struct {
-	id int
 }
 
 // MessageResponse represents https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-messages
@@ -50,32 +47,4 @@ type MessageResponse struct {
 // AutocompleteResponse represents https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-autocomplete
 type AutocompleteResponse struct {
 	Choices []CommandOptionChoice `json:"choices"` // Max 25 length
-}
-
-func handleInteractionCommands(payload InteractionCreatePayload, client *Client) { // Built-in event handler for dispatching application Commands
-	if payload.Type != 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
-		return
-	}
-
-	var c ApplicationCommandData
-	if err := json.Unmarshal(*payload.Data, &c); err != nil {
-		slog.Error("Failed to parse application command data: " + err.Error())
-		return
-	}
-
-	for _, command := range client.Commands {
-		if c.Name == command.Name {
-			slog.Info("Dispatching application command: " + c.Name)
-
-			if err := command.Handler(c, payload.Id, payload.Token, client); err != nil {
-				slog.Error("Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
-				_, _ = client.SendInteractionResponse(InteractionResponse{
-					Type: RespTypeChannelMessage,
-					Data: Message{Content: "An error occurred executing this command: " + err.Error(), Flags: MsgFlagEphemeral},
-				}, payload.Id, payload.Token)
-			}
-			return
-		}
-	}
-	slog.Warn("Application command was dispatched but no handler was found: " + c.Name)
 }

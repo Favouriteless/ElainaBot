@@ -8,7 +8,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const database = "./database.db"
+const database = "data/database.db"
 
 var tables = []string{
 	`
@@ -88,7 +88,7 @@ func queryRow(query string, args ...any) (*sql.Row, error) {
 	return db.QueryRow(query, args...), nil
 }
 
-func InitialiseDatabase() error {
+func InitializeDatabase() error {
 	slog.Info("Initialising database")
 	db, err := sql.Open("sqlite", database)
 	if err != nil {
@@ -103,6 +103,6 @@ func InitialiseDatabase() error {
 		}
 	}
 
-	slog.Info("Database initialised")
+	slog.Info("Database initialized")
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -25,30 +26,28 @@ func main() {
 		panic(err)
 	}
 
-	client, err := discord.CreateClient("ElainaBot", secrets.clientId, secrets.clientSecret, secrets.token, intents)
-	if err != nil {
+	discord.Initialize("ElainaBot", secrets.clientId, secrets.clientSecret, secrets.token)
+
+	if err = config.InitializeConfig(); err != nil {
 		panic(err)
 	}
 
-	if err = config.InitialiseConfig(); err != nil {
-		panic(err)
-	}
+	elaina.RegisterEvents()
+	elaina.RegisterCommands()
 
-	elaina.RegisterEvents(&client.Events)
-	elaina.RegisterCommands(client)
-
-	deploy := flag.String("mode", "bot", "Set the running mode: deploy_commands=deploy application commands, deploy_db=deploy database")
+	deploy := flag.String("mode", "bot", "Update the running mode: deploy_commands=deploy application commands, deploy_db=deploy database")
+	commands := flag.String("commands", "", "Update the commands to deploy when using the --mode=deploy_commands")
 	flag.Parse()
 
 	switch *deploy {
 	case "deploy_commands":
-		client.DeployAllCommands()
+		discord.DeployCommands(strings.Split(*commands, ",")...)
 	case "deploy_db":
-		if err = elaina.InitialiseDatabase(); err != nil {
+		if err = elaina.InitializeDatabase(); err != nil {
 			panic(err)
 		}
 	default:
-		if err = client.ConnectGateway(); err != nil {
+		if err = discord.InitializeGateway(intents); err != nil {
 			panic(err)
 		}
 
@@ -58,7 +57,7 @@ func main() {
 		<-sigChan
 
 		slog.Info("Shutting down...")
-		client.CloseGateway(false)
+		discord.CloseGateway()
 	}
 }
 
@@ -71,13 +70,13 @@ func loadSecrets() (secrets Secrets, err error) {
 		secrets.clientId = "1161747004712554656" // Elaina's client ID
 
 		// Production secrets managed via docker compose secrets
-		file, err := os.ReadFile("/run/secrets/elaina-secret")
+		file, err := os.ReadFile("secrets/elaina-secret")
 		if err != nil {
 			return secrets, err
 		}
 		secrets.clientSecret = string(file)
 
-		file, err = os.ReadFile("/run/secrets/elaina-token")
+		file, err = os.ReadFile("secrets/elaina-token")
 		if err != nil {
 			return secrets, err
 		}

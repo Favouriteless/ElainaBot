@@ -4,50 +4,76 @@ import (
 	"ElainaBot/config"
 	"ElainaBot/discord"
 	"errors"
+	"fmt"
 	"log/slog"
 	"regexp"
 
 	"github.com/zmwangx/emojiregexp"
 )
 
-func RegisterCommands(client *discord.Client) {
-	client.Commands = []*discord.ApplicationCommand{
+func RegisterCommands() {
+	discord.Commands = []*discord.ApplicationCommand{
 		{
 			Name:        "echo",
 			Type:        discord.CmdTypeChatInput,
 			Description: "Repeats what you said back to you",
 			Options: []discord.CommandOption{
-				discord.CmdOptString.Create("string", "Echo... echo... echo...", true),
+				{
+					Name:        "string",
+					Description: "Echo... echo... echo...",
+					Type:        discord.CmdOptString,
+					Required:    true,
+				},
 			},
 			Handler: echoHandler,
 		},
 		{
 			Name:        "sethelloemoji",
-			Description: "Set the emoji Elaina uses to say hi",
+			Description: "Update the emoji Elaina uses to say hi",
 			Type:        discord.CmdTypeChatInput,
 			Options: []discord.CommandOption{
-				discord.CmdOptString.Create("emoji", "Emoji to use as hello. If \"default\" is used, Elaina will reset the emoji", true),
+				{
+					Name:        "emoji",
+					Description: "Emoji to use as hello. If \"default\" is used, Elaina will reset the emoji",
+					Type:        discord.CmdOptString,
+					Required:    true,
+				},
 			},
 			Permissions: discord.PermAdministrator,
 			Handler:     setHelloHandler,
 		},
 		{
 			Name:        "setmacro",
-			Description: "Set a macro for Elaina",
+			Description: "Update a macro for Elaina",
 			Type:        discord.CmdTypeChatInput,
 			Options: []discord.CommandOption{
-				discord.CmdOptString.Create("key", "Key used to trigger the macro", true),
-				discord.CmdOptString.Create("response", "The text Elaina will respond with", true),
+				{
+					Name:        "key",
+					Description: "Key used to trigger the macro",
+					Type:        discord.CmdOptString,
+					Required:    true,
+				},
+				{
+					Name:        "response",
+					Description: "The text Elaina will respond with",
+					Type:        discord.CmdOptString,
+					Required:    true,
+				},
 			},
 			Permissions: discord.PermAdministrator,
 			Handler:     setMacroHandler,
 		},
 		{
 			Name:        "deletemacro",
-			Description: "Delete a macro from Elaina",
+			Description: "Invalidate a macro from Elaina",
 			Type:        discord.CmdTypeChatInput,
 			Options: []discord.CommandOption{
-				discord.CmdOptString.Create("key", "Key used to trigger the macro", true),
+				{
+					Name:        "key",
+					Description: "Key used to trigger the macro",
+					Type:        discord.CmdOptString,
+					Required:    true,
+				},
 			},
 			Permissions: discord.PermAdministrator,
 			Handler:     deleteMacroHandler,
@@ -57,16 +83,36 @@ func RegisterCommands(client *discord.Client) {
 			Description: "Fetches a string by key from Elaina",
 			Type:        discord.CmdTypeChatInput,
 			Options: []discord.CommandOption{
-				discord.CmdOptString.Create("key", "Key used to trigger the macro", true),
+				{
+					Name:        "key",
+					Description: "Key used to trigger the macro",
+					Type:        discord.CmdOptString,
+					Required:    true,
+				},
 			},
 			Handler: useMacroHandler,
+		},
+		{
+			Name:        "sethoneypot",
+			Description: "Update the honeypot channel Elaina bans people in",
+			Type:        discord.CmdTypeChatInput,
+			Options: []discord.CommandOption{
+				{
+					Name:        "channel",
+					Description: "Channel to ban users for typing in",
+					Type:        discord.CmdOptChannel,
+					Required:    true,
+				},
+			},
+			Permissions: discord.PermAdministrator,
+			Handler:     setHoneypotHandler,
 		},
 	}
 }
 
 var customEmojiRegex = regexp.MustCompile("^<a?:.{2,}?:\\d{18,20}>$")
 
-func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string, client *discord.Client) error {
+func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
 	emoji, err := data.OptionByName("emoji").AsString()
 	if err != nil {
 		return err
@@ -101,27 +147,19 @@ func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 		return errors.New(original + " is not a valid emoji")
 	}
 
-	_, err = client.SendInteractionResponse(discord.InteractionResponse{
-		Type: discord.RespTypeChannelMessage,
-		Data: discord.Message{Content: reply, Flags: discord.MsgFlagEphemeral},
-	}, id, token)
-	return err
+	return discord.SendInteractionMessageResponse(discord.Message{Content: reply, Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func echoHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string, client *discord.Client) error {
+func echoHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
 	echo, err := data.OptionByName("string").AsString()
 	if err != nil {
 		return err
 	}
 
-	_, err = client.SendInteractionResponse(discord.InteractionResponse{
-		Type: discord.RespTypeChannelMessage,
-		Data: discord.Message{Content: echo, Flags: discord.MsgFlagEphemeral},
-	}, id, token)
-	return err
+	return discord.SendInteractionMessageResponse(discord.Message{Content: echo, Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func setMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string, client *discord.Client) (err error) {
+func setMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) (err error) {
 	var macro Macro
 	if macro.Key, err = data.OptionByName("key").AsString(); err != nil {
 		return err
@@ -134,14 +172,10 @@ func setMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 	}
 	slog.Info("Macro set:", slog.String("key", macro.Key), slog.String("response", macro.Response))
 
-	_, err = client.SendInteractionResponse(discord.InteractionResponse{
-		Type: discord.RespTypeChannelMessage,
-		Data: discord.Message{Content: "Macro set!", Flags: discord.MsgFlagEphemeral},
-	}, id, token)
-	return err
+	return discord.SendInteractionMessageResponse(discord.Message{Content: "Macro set!", Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func deleteMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string, client *discord.Client) error {
+func deleteMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
 	key, err := data.OptionByName("key").AsString()
 	if err != nil {
 		return err
@@ -157,14 +191,10 @@ func deleteMacroHandler(data discord.ApplicationCommandData, id discord.Snowflak
 		response = "No macro found for \"" + key + "\""
 	}
 
-	_, err = client.SendInteractionResponse(discord.InteractionResponse{
-		Type: discord.RespTypeChannelMessage,
-		Data: discord.Message{Content: response, Flags: discord.MsgFlagEphemeral},
-	}, id, token)
-	return err
+	return discord.SendInteractionMessageResponse(discord.Message{Content: response, Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func useMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string, client *discord.Client) error {
+func useMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
 	key, err := data.OptionByName("key").AsString()
 	if err != nil {
 		return err
@@ -181,12 +211,33 @@ func useMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 		response = discord.Message{Content: "No macro found for \"" + key + "\"", Flags: discord.MsgFlagEphemeral}
 	}
 
-	_, err = client.SendInteractionResponse(discord.InteractionResponse{
-		Type: discord.RespTypeChannelMessage,
-		Data: response,
-	}, id, token)
+	return discord.SendInteractionMessageResponse(response, id, token)
+}
+
+func setHoneypotHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
+	channel, err := data.OptionByName("channel").AsSnowflake()
 	if err != nil {
 		return err
 	}
-	return nil
+
+	fetched, err := discord.GetChannel(channel)
+	if err != nil {
+		return err
+	}
+	if fetched == nil {
+		return discord.SendInteractionMessageResponse(discord.Message{
+			Content: "Could not find channel: " + channel.String(),
+			Flags:   discord.MsgFlagEphemeral,
+		}, id, token)
+	}
+
+	config.Set(config.HoneyPotChannel, channel)
+	if err = config.SaveConfig(); err != nil {
+		return err
+	}
+
+	return discord.SendInteractionMessageResponse(discord.Message{
+		Content: fmt.Sprintf("Honey pot channel set to: <#%s>", channel),
+		Flags:   discord.MsgFlagEphemeral,
+	}, id, token)
 }

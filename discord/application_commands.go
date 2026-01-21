@@ -2,7 +2,7 @@ package discord
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 )
 
 // Command context as specified by https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
@@ -20,20 +20,42 @@ const (
 	CmdTypePrimaryEntryPoint = 4
 )
 
-// var CmdOptSubCommand = unimplemented
-// var CmdOptSubCommandGroup = unimplemented
+// Command option type as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
+const (
+	CmdOptSubCommand      = 1
+	CmdOptSubCommandGroup = 2
+	CmdOptString          = 3
+	CmdOptInt             = 4
+	CmdOptBool            = 5
+	CmdOptUser            = 6
+	CmdOptChannel         = 7
+	CmdOptRole            = 8
+	CmdOptMentionable     = 9
+	CmdOptFloat64         = 10
+	CmdOptAttachment      = 11
+)
 
-var CmdOptString = OptionType[string]{3}
-var CmdOptInt = OptionType[int]{4}
-var CmdOptBool = OptionType[bool]{5}
-var CmdOptUser = OptionType[Snowflake]{6}
-var CmdOptChannel = OptionType[Snowflake]{7}
-var CmdOptRole = OptionType[Snowflake]{8}
-var CmdOptMentionable = OptionType[Snowflake]{9}
-var CmdOptFloat64 = OptionType[float64]{10}
-var CmdOptAttachment = OptionType[Attachment]{11}
+var idToOptTypeName = map[int]string{
+	CmdOptSubCommand:      "Subcommand",
+	CmdOptSubCommandGroup: "Subcommand Group",
+	CmdOptString:          "String",
+	CmdOptInt:             "Integer",
+	CmdOptBool:            "Boolean",
+	CmdOptUser:            "User",
+	CmdOptChannel:         "Channel",
+	CmdOptRole:            "Role",
+	CmdOptMentionable:     "Mentionable",
+	CmdOptFloat64:         "Float64",
+	CmdOptAttachment:      "Attachment",
+}
 
-type CommandHandler func(data ApplicationCommandData, id Snowflake, token string, client *Client) error
+var Commands = make([]*ApplicationCommand, 1)
+
+func AddCommand(command *ApplicationCommand) {
+	Commands = append(Commands, command)
+}
+
+type CommandHandler = func(data ApplicationCommandData, id Snowflake, token string) error
 
 // ApplicationCommand represents https://discord.com/developers/docs/interactions/application-commands#application-command-object
 // as well as its responses https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
@@ -53,14 +75,6 @@ type ApplicationCommand struct {
 	Handler     CommandHandler `json:"-"` // If true, the command will be consumed by this handler and not passed to others
 }
 
-type OptionType[T any] struct {
-	id int
-}
-
-func (o OptionType[T]) Create(name string, description string, required bool, choices ...CommandOptionChoice) CommandOption {
-	return CommandOption{o.id, name, description, required, choices}
-}
-
 // CommandOption represents https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-structure
 // These are exposed by methods on OptionType and should not be created directly as generics can't express them properly
 type CommandOption struct {
@@ -75,10 +89,11 @@ type CommandOption struct {
 // CommandOptionChoice represents https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-choice-structure
 type CommandOptionChoice struct {
 	Name  string      `json:"name"`  // 1-100 characters
-	Value interface{} `json:"value"` // This may be various types, matching the parent CommandOption. Create via OptionType.Create instead.
+	Value interface{} `json:"value"` // This may be various types, matching the parent CommandOption.
 }
 
-// ApplicationCommandData represents an application command RESPONSE sent by discord https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
+// ApplicationCommandData represents an application command response sent by discord
+// https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
 type ApplicationCommandData struct {
 	Name         string              `json:"name"`
 	Type         int                 `json:"type"` // 1 = CHAT_INPUT, 2 = USER, 3 = MESSAGE, 4 = PRIMARY_ENTRY_POINT.
@@ -89,7 +104,7 @@ type ApplicationCommandData struct {
 	ResolvedData *ResolvedData       `json:"resolved"`
 }
 
-// OptionByName iterates over all child options and returns the first one with a matching name. If no name is found,
+// OptionByName iterates over all child options and returns the first one with a matching name. If no option is found,
 // returns nil.
 func (d ApplicationCommandData) OptionByName(name string) *CommandOptionData {
 	for _, option := range d.Options {
@@ -98,15 +113,6 @@ func (d ApplicationCommandData) OptionByName(name string) *CommandOptionData {
 		}
 	}
 	return nil
-}
-
-type ResolvedData struct {
-	Users       map[Snowflake]User        `json:"users"`
-	Members     map[Snowflake]GuildMember `json:"members"`
-	Roles       map[Snowflake]Role        `json:"roles"`
-	Channels    map[Snowflake]Channel     `json:"channels"`
-	Messages    map[Snowflake]Message     `json:"messages"`
-	Attachments map[Snowflake]Attachment  `json:"discord.Attachments"`
 }
 
 // CommandOptionData represents https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-interaction-data-option-structure
@@ -152,83 +158,50 @@ func (o *CommandOptionData) UnmarshalJSON(data []byte) error {
 }
 
 func (o *CommandOptionData) AsString() (string, error) {
-	if err := o.assertType(CmdOptString.id); err != nil {
+	if err := o.assertType(CmdOptString); err != nil {
 		return "", err
 	}
 	return o.Value.(string), nil
 }
 
 func (o *CommandOptionData) AsInt() (int, error) {
-	if err := o.assertType(CmdOptInt.id); err != nil {
+	if err := o.assertType(CmdOptInt); err != nil {
 		return 0, err
 	}
 	return o.Value.(int), nil
 }
 
 func (o *CommandOptionData) AsBool() (bool, error) {
-	if err := o.assertType(CmdOptBool.id); err != nil {
+	if err := o.assertType(CmdOptBool); err != nil {
 		return false, err
 	}
 	return o.Value.(bool), nil
 }
 
-func (o *CommandOptionData) AsUser() (Snowflake, error) {
-	if err := o.assertType(CmdOptUser.id); err != nil {
-		return "", err
-	}
-	return o.Value.(Snowflake), nil
-}
-
-func (o *CommandOptionData) AsChannel() (Snowflake, error) {
-	if err := o.assertType(CmdOptChannel.id); err != nil {
-		return "", err
-	}
-	return o.Value.(Snowflake), nil
-}
-
-func (o *CommandOptionData) AsRole() (Snowflake, error) {
-	if err := o.assertType(CmdOptRole.id); err != nil {
-		return "", err
-	}
-	return o.Value.(Snowflake), nil
-}
-
-func (o *CommandOptionData) AsMentionable() (Snowflake, error) {
-	if err := o.assertType(CmdOptMentionable.id); err != nil {
-		return "", err
+func (o *CommandOptionData) AsSnowflake() (Snowflake, error) {
+	if err := o.assertType(CmdOptUser); err != nil {
+		return 0, err
 	}
 	return o.Value.(Snowflake), nil
 }
 
 func (o *CommandOptionData) AsFloat64() (float64, error) {
-	if err := o.assertType(CmdOptFloat64.id); err != nil {
+	if err := o.assertType(CmdOptFloat64); err != nil {
 		return 0, err
 	}
 	return o.Value.(float64), nil
 }
 
 func (o *CommandOptionData) AsAttachment() (*Attachment, error) {
-	if err := o.assertType(CmdOptAttachment.id); err != nil {
+	if err := o.assertType(CmdOptAttachment); err != nil {
 		return nil, err
 	}
 	return o.Value.(*Attachment), nil
 }
 
-var idToOptTypeName = map[int]string{
-	3:  "String",
-	4:  "Integer",
-	5:  "Boolean",
-	6:  "User",
-	7:  "Channel",
-	8:  "Role",
-	9:  "Mentionable",
-	10: "Float64",
-	11: "Attachment",
-}
-
 func (o *CommandOptionData) assertType(expected int) error {
 	if o.Type != expected {
-		return errors.New("expected option of type " + idToOptTypeName[expected] + " but got " + idToOptTypeName[o.Type])
+		return fmt.Errorf("expected option of type %s but got %s", idToOptTypeName[expected], idToOptTypeName[o.Type])
 	}
 	return nil
 }

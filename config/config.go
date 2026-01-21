@@ -1,21 +1,25 @@
 package config
 
 import (
+	"ElainaBot/discord"
 	"encoding/json"
 	"log/slog"
 	"os"
+	"strconv"
 	"sync"
 )
 
 const (
 	HelloEmoji        = "hello_emoji"
 	DefaultHelloEmoji = "default_hello_emoji"
+	HoneyPotChannel   = "honey_pot_channel"
 )
 
 func defaultValues() map[string]any {
 	return map[string]any{
-		"hello_emoji":         "elainastare:1462289034188689468",
-		"default_hello_emoji": "elainastare:1462289034188689468",
+		HelloEmoji:        "elainastare:1462289034188689468",
+		DefaultHelloEmoji: "elainastare:1462289034188689468",
+		HoneyPotChannel:   "",
 	}
 }
 
@@ -43,7 +47,22 @@ func GetString(key string) string {
 	return Get(key).(string)
 }
 
-func InitialiseConfig() (err error) {
+func GetSnowflake(key string) *discord.Snowflake {
+	str := GetString(key)
+	if str == "" {
+		return nil
+	}
+
+	i, err := strconv.ParseUint(str, 10, 64)
+	if err != nil {
+		slog.Error("Failed to load config value as snowflake: \"" + key + "\"")
+		return nil
+	}
+	s := discord.Snowflake(i)
+	return &s
+}
+
+func InitializeConfig() (err error) {
 	slog.Info("Loading config...")
 	config.values = defaultValues()
 
