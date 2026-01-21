@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,8 +30,7 @@ const (
 
 var gatewayConnection *gateway
 
-var ErrGatewayNormalClosure = errors.New("discord gateway closed normally")
-var ErrInvalidResumeUrl = errors.New("invalid resuming url")
+var ErrInvalidResumeUrl = errors.New("invalid resume url")
 
 type gateway struct {
 	conn      *websocket.Conn // Websocket connection for the client. Only supports writing from one thread, use sendQueue to write to it
@@ -60,15 +60,16 @@ func ListenGateway(intents int, quit <-chan interface{}) {
 		go func() {
 			<-quit
 			slog.Info("Closing gateway connection")
+			gatewayConnection.cardiacArrest.Store(true)
 			_ = gatewayConnection.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
 		}()
 
 		for {
 			reconnect, err := gatewayConnection.connect()
+			if err != nil {
+				slog.Error("Error connecting to gateway: " + err.Error())
+			}
 			if !reconnect {
-				if err != nil {
-					slog.Error("Error connecting to gateway: " + err.Error())
-				}
 				break
 			}
 		}
@@ -89,6 +90,10 @@ func (gateway *gateway) connect() (reconnect bool, err error) {
 	slog.Info("Attempting to connect to gateway:", slog.String("api_version", apiVersion), slog.String("api_encoding", apiEncoding))
 	gateway.conn, _, err = websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
+		if os.IsTimeout(err) {
+			gateway.connectUrl = ""
+			return true, err
+		}
 		return false, err
 	}
 	slog.Info("Websocket initialized")
