@@ -17,7 +17,7 @@ func logMessagesEvent(payload discord.CreateMessagePayload) {
 	if payload.Author.Bot {
 		return
 	}
-	slog.Info("Message received:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
+	slog.Info("[Elaina] Message received:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
 }
 
 func respondToNameEvent(payload discord.CreateMessagePayload) {
@@ -27,9 +27,9 @@ func respondToNameEvent(payload discord.CreateMessagePayload) {
 
 	if elainaRegex.MatchString(payload.Content) {
 		if err := discord.CreateReaction(payload.ChannelId, payload.Id, config.GetString(config.HelloEmoji)); err != nil {
-			slog.Error("Could not say hello to " + payload.Author.Username + ": " + err.Error())
+			slog.Error("[Elaina] Could not say hello to " + payload.Author.Username + ": " + err.Error())
 		} else {
-			slog.Info("Saying hello to " + payload.Author.Username)
+			slog.Info("[Elaina] Saying hello to " + payload.Author.Username)
 		}
 	}
 }
@@ -42,7 +42,7 @@ func banHoneypotEvent(payload discord.CreateMessagePayload) {
 	}
 
 	if payload.Member.Permissions&discord.PermAdministrator > 0 {
-		slog.Info("Administrator typed in honeypot channel:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
+		slog.Info("[Elaina] Administrator typed in honeypot channel:", slog.String("author", payload.Author.Username), slog.String("content", payload.Content))
 		return
 	}
 }

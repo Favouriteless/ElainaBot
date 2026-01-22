@@ -15,28 +15,28 @@ const ( // Payload Opcodes as specified by https://discord.com/developers/docs/t
 	opRequestSoundboard = 31 // Send
 )
 
-// HelloPayload is a non-standard event, it doesn't have a type. Opcode 1 instead
-type HelloPayload struct {
+// helloPayload is a non-standard event, it doesn't have a type. Opcode 1 instead
+type helloPayload struct {
 	HeartbeatInterval int64 `json:"heartbeat_interval"`
 }
 
-// IdentifyPayload is a non-standard event, it doesn't have a type. Opcode 2 instead
-type IdentifyPayload struct {
+// identifyPayload is a non-standard event, it doesn't have a type. Opcode 2 instead
+type identifyPayload struct {
 	Token      string               `json:"token"`
 	Properties ConnectionProperties `json:"properties"`
 	Intents    int                  `json:"intents"`
 }
 
-// ResumePayload is a non-standard event, it doesn't have a type. Opcode 6 instead
-type ResumePayload struct {
+// resumePayload is a non-standard event, it doesn't have a type. Opcode 6 instead
+type resumePayload struct {
 	Token       string `json:"token"`
 	SessionId   string `json:"session_id"`
 	SequenceNum int32  `json:"seq"`
 }
 
-// ReadyPayload is sent by discord after the client has successfully identified itself and is ready to receive events.
+// readyPayload is sent by discord after the client has successfully identified itself and is ready to receive events.
 // https://discord.com/developers/docs/events/gateway-events#ready
-type ReadyPayload struct {
+type readyPayload struct {
 	ApiVersion       int         `json:"v"`
 	User             User        `json:"user"`
 	Guilds           []Guild     `json:"guilds"`
@@ -45,7 +45,7 @@ type ReadyPayload struct {
 	Application      Application `json:"application"`
 }
 
-func (p ReadyPayload) Name() string {
+func (p readyPayload) Name() string {
 	return "RESUME"
 }
 

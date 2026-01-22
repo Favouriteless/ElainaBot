@@ -28,9 +28,7 @@ const (
 	closeTimedOut             = 4009
 )
 
-var context *gateway
-
-var ErrInvalidResumeUrl = errors.New("invalid resume url")
+var ErrInvalidResumeUrl = errors.New("[Gateway] invalid resume url")
 
 type gateway struct {
 	conn      *websocket.Conn // Websocket connection for the client. Only supports writing from one thread, use sendQueue to write to it
@@ -62,15 +60,15 @@ func (h *GatewayHandle) Close() {
 	h.Disconnect <- true
 }
 
-// ListenGateway initializes the gateway struct and attempts to send a connection request to the API.
+// ListenGateway initializes a gateway connection and returns a GatewayHandle for controlling it.
 func ListenGateway(intents int) *GatewayHandle {
-	slog.Info("Initializing gateway connection...")
+	slog.Info("[Gateway] Initializing connection...")
 
 	done := make(chan error)
 	disconnect := make(chan interface{})
 
 	go func() {
-		context = &gateway{sendQueue: make(chan []byte, defaultQueueSize), intents: intents}
+		context := &gateway{sendQueue: make(chan []byte, defaultQueueSize), intents: intents}
 		disconnecting := atomic.Bool{}
 
 		go func() {
@@ -105,10 +103,10 @@ func (gateway *gateway) connect() (reconnect bool, err error) {
 		gateway.resuming = false
 		return gateway.connect()
 	} else if err != nil {
-		return false, err
+		return false, errors.New("could not fetch a gateway url: " + err.Error())
 	}
 
-	slog.Info("Attempting to connect to gateway:", slog.String("api_version", apiVersion), slog.String("api_encoding", apiEncoding))
+	slog.Info("[Gateway] Attempting to connect:", slog.String("api_version", apiVersion), slog.String("api_encoding", apiEncoding))
 	gateway.conn, _, err = websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		if os.IsTimeout(err) {
@@ -117,7 +115,7 @@ func (gateway *gateway) connect() (reconnect bool, err error) {
 		}
 		return false, err
 	}
-	slog.Info("Websocket initialized")
+	slog.Info("[Gateway] Websocket initialized")
 
 	var closeCode int
 	gateway.conn.SetCloseHandler(func(c int, t string) error {
@@ -153,30 +151,30 @@ func (gateway *gateway) readUntilClosed(resuming bool) (shouldResume bool, err e
 			return false, nil
 		}
 		var payload gatewayPayload
-		if err := gateway.conn.ReadJSON(&payload); err != nil {
+		if err = gateway.conn.ReadJSON(&payload); err != nil {
 			return false, err
 		}
 
 		switch payload.Opcode {
 		case opHello:
-			var hello HelloPayload
+			var hello helloPayload
 			if err = json.Unmarshal(*payload.Data, &hello); err != nil {
 				panic(err) // Should never be hit
 			}
-			slog.Info("Starting heartbeats")
 			gateway.wg.Add(1)
 			go gateway.heartbeat(time.Millisecond * time.Duration(hello.HeartbeatInterval))
+
 			gateway.identify(resuming)
 		case opDispatch:
 			gateway.sequence.Store(*payload.SequenceNum)
-			go dispatchEvent(*payload.EventName, *payload.Data)
+			go gateway.dispatchEvent(*payload.EventName, *payload.Data)
 		case opHeartbeat:
 			gateway.sendHeartbeat()
 		case opReconnect:
-			slog.Info("Discord requested a gateway reconnect")
+			slog.Info("[Gateway] Discord requested a reconnect")
 			return true, nil
 		case opInvalidSession:
-			slog.Warn("Discord invalidated the gateway session. Attempting to reconnect...")
+			slog.Warn("[Gateway] Discord invalidated the session")
 			var resume bool
 			if err = json.Unmarshal(*payload.Data, &resume); err != nil {
 				panic(err) // Should never be hit
@@ -211,7 +209,7 @@ func (gateway *gateway) sendPayload(payload *gatewayPayload) error {
 // Identify sends either an IDENTIFY or RESUME packet depending on the value of resuming
 func (gateway *gateway) identify(resume bool) {
 	if resume {
-		id, err := json.Marshal(ResumePayload{
+		id, err := json.Marshal(resumePayload{
 			Token:       application.token,
 			SessionId:   gateway.sessionId,
 			SequenceNum: gateway.sequence.Load(),
@@ -222,10 +220,10 @@ func (gateway *gateway) identify(resume bool) {
 		if err = gateway.sendPayload(&gatewayPayload{Opcode: opResume, Data: (*json.RawMessage)(&id)}); err != nil {
 			panic(err) // Should never be hit
 		}
-		slog.Info("Resuming gateway connection")
+		slog.Info("[Gateway] Resuming connection")
 		return
 	}
-	enc, err := json.Marshal(IdentifyPayload{
+	enc, err := json.Marshal(identifyPayload{
 		Token:      application.token,
 		Properties: ConnectionProperties{Os: "windows", Browser: application.name, Device: application.name},
 		Intents:    gateway.intents,
@@ -236,7 +234,7 @@ func (gateway *gateway) identify(resume bool) {
 	if err = gateway.sendPayload(&gatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&enc)}); err != nil {
 		panic(err) // Should never be hit
 	}
-	slog.Info("Identifying gateway connection")
+	slog.Info("[Gateway] Identifying connection")
 }
 
 func (gateway *gateway) sendHeartbeat() {
@@ -246,7 +244,7 @@ func (gateway *gateway) sendHeartbeat() {
 	}
 
 	if err = gateway.sendPayload(&gatewayPayload{Opcode: opHeartbeat, Data: (*json.RawMessage)(&data)}); err != nil {
-		slog.Error("Failed to send heartbeat: " + err.Error())
+		slog.Error("[Gateway] Failed to send heartbeat: " + err.Error())
 		return
 	}
 	gateway.heartbeatAcknowledged = false
@@ -258,12 +256,13 @@ func (gateway *gateway) heartbeat(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	slog.Info("[Gateway] Starting heartbeats")
 	gateway.sendHeartbeat()
 	for {
 		select {
 		case <-ticker.C:
 			if !gateway.heartbeatAcknowledged {
-				slog.Error("Heartbeat not acknowledged, terminating connection to resume")
+				slog.Error("[Gateway] Heartbeat not acknowledged, terminating connection and resuming")
 				gateway.resuming = true
 				_ = gateway.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseServiceRestart, ""), time.Now().Add(time.Second))
 				gateway.conn.Close()
@@ -285,7 +284,7 @@ func (gateway *gateway) handleWriting() {
 		select {
 		case payload := <-gateway.sendQueue:
 			if err := gateway.conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-				slog.Error("Failed write to gateway connection: " + err.Error()) // This should never be hit, but just in case
+				slog.Error("[Gateway] Failed write to connection: " + err.Error()) // This should never be hit, but just in case
 			}
 		default:
 			if gateway.cardiacArrest.Load() {

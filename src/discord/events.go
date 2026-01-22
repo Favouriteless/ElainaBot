@@ -6,7 +6,6 @@ import (
 )
 
 var Events = &EventDispatcher{
-	Ready:             Event[ReadyPayload]{Name: "READY", builtin: []EventHandler[ReadyPayload]{readyEvent}},
 	CreateMessage:     Event[CreateMessagePayload]{Name: "MESSAGE_CREATE"},
 	UpdateMessage:     Event[UpdateMessagePayload]{Name: "MESSAGE_UPDATE", builtin: []EventHandler[UpdateMessagePayload]{updateMessageEvent}},
 	DeleteMessage:     Event[DeleteMessagePayload]{Name: "MESSAGE_DELETE", builtin: []EventHandler[DeleteMessagePayload]{deleteMessageEvent}},
@@ -38,7 +37,6 @@ func (event *Event[T]) Register(handler ...EventHandler[T]) {
 }
 
 type EventDispatcher struct {
-	Ready             Event[ReadyPayload]
 	CreateMessage     Event[CreateMessagePayload]
 	UpdateMessage     Event[UpdateMessagePayload]
 	DeleteMessage     Event[DeleteMessagePayload]
@@ -59,7 +57,7 @@ func (event *Event[T]) dispatch(raw []byte) {
 	}
 	var data T
 	if err := json.Unmarshal(raw, &data); err != nil {
-		slog.Error("Failed to parse gateway event: " + err.Error())
+		slog.Error("[Event] Failed to parse gateway event: " + err.Error())
 		return
 	}
 	for _, handler := range event.handlers {
@@ -72,10 +70,18 @@ func (event *Event[T]) dispatch(raw []byte) {
 
 // Not really a fan of how this is implemented, but I couldn't figure out how to maintain type safety during event handler
 // registration without doing this.
-func dispatchEvent(name string, raw []byte) {
+func (gateway *gateway) dispatchEvent(name string, raw []byte) {
 	switch name {
-	case Events.Ready.Name:
-		Events.Ready.dispatch(raw)
+	case "READY": // Ready event has special handling, API users do not need it
+		var payload readyPayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			panic(err) // Should never be hit
+		}
+		gateway.resumeUrl = payload.ResumeGatewayUrl
+		gateway.sessionId = payload.SessionId
+		slog.Info("[Event] Gateway connection established")
+	case "RESUME":
+		slog.Info("[Event] Gateway connection resumed") // Payload doesn't need to be read here, only care for logging
 	case Events.CreateMessage.Name:
 		Events.CreateMessage.dispatch(raw)
 	case Events.UpdateMessage.Name:

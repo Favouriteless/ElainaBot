@@ -20,8 +20,11 @@ func SendInteractionResponse(response InteractionResponse, id Snowflake, token s
 		return err
 	}
 	resp, err := Post(Url("interactions", id.String(), token, "callback"), bytes.NewReader(encResponse))
+	if err != nil {
+		return err
+	}
 	_ = resp.Body.Close()
-	return err
+	return nil
 }
 
 func SendInteractionMessageResponse(message Message, id Snowflake, token string) error {

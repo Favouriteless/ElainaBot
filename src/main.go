@@ -56,13 +56,13 @@ func main() {
 		for {
 			select {
 			case <-sigChan:
-				slog.Info("Shutting down...")
+				slog.Info("[Elaina] Shutting down...")
 				handle.Close()
 			case err = <-handle.Done:
 				if err != nil {
-					slog.Error("Gateway connection closed with an error: " + err.Error())
+					slog.Error("[Elaina] Gateway connection closed with an error: " + err.Error())
 				} else {
-					slog.Info("Gateway connection closed")
+					slog.Info("[Elaina] Gateway connection closed")
 				}
 				return
 			}

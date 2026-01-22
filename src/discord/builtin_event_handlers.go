@@ -5,13 +5,6 @@ import (
 	"log/slog"
 )
 
-// readyEvent updates the gateway resuming URL and session ID
-func readyEvent(payload ReadyPayload) {
-	context.resumeUrl = payload.ResumeGatewayUrl
-	context.sessionId = payload.SessionId
-	slog.Info("Gateway connection established")
-}
-
 // interactionCreateEvent dispatches ApplicationCommands
 func interactionCreateEvent(payload InteractionCreatePayload) { // Built-in event handler for dispatching application Commands
 	if payload.Type != 2 { // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data
@@ -20,16 +13,16 @@ func interactionCreateEvent(payload InteractionCreatePayload) { // Built-in even
 
 	var c ApplicationCommandData
 	if err := json.Unmarshal(*payload.Data, &c); err != nil {
-		slog.Error("Failed to parse application command data: " + err.Error())
+		slog.Error("[Event] Failed to parse application command data: " + err.Error())
 		return
 	}
 
 	for _, command := range Commands {
 		if c.Name == command.Name {
-			slog.Info("Dispatching application command: " + c.Name)
+			slog.Info("[Event] Dispatching application command: " + c.Name)
 
 			if err := command.Handler(c, payload.Id, payload.Token); err != nil {
-				slog.Error("Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
+				slog.Error("[Event] Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
 				_ = SendInteractionResponse(InteractionResponse{
 					Type: RespTypeChannelMessage,
 					Data: Message{Content: "An error occurred executing this command: " + err.Error(), Flags: MsgFlagEphemeral},
@@ -38,7 +31,7 @@ func interactionCreateEvent(payload InteractionCreatePayload) { // Built-in even
 			return
 		}
 	}
-	slog.Warn("Application command was dispatched but no handler was found: " + c.Name)
+	slog.Warn("[Event] Application command was dispatched but no handler was found: " + c.Name)
 }
 
 func updateChannelEvent(payload UpdateChannelPayload) {

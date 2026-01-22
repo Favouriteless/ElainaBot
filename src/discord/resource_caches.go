@@ -52,8 +52,8 @@ func (c *ResourceCache[V]) Add(key Snowflake, value V) {
 	}
 }
 
-// Delete removes a given resource from the cache, it not immediately clear space in the cache. The value will only be
-// overwritten the next time the head passes by its index
+// Invalidate removes a given resource from the cache, it not immediately clear space in the cache. The value will only
+// be overwritten the next time the head passes by its index
 func (c *ResourceCache[V]) Invalidate(key Snowflake) {
 	c.mutex.Lock()
 	delete(c.id2index, key)

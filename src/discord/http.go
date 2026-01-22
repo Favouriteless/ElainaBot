@@ -30,8 +30,8 @@ func SendHttp(method string, url string, body io.Reader, headers ...string) (*ht
 	req.Header.Set("User-Agent", "DiscordBot (https://github.com/Favouriteless/ElainaBot, 2.0.0)")
 	req.Header.Set("Authorization", "Bot "+application.token)
 
-	var resp *http.Response
-	for range defaultHttpAttempts { // This only returns the last error if it fails
+	for range defaultHttpAttempts {
+		var resp *http.Response
 		resp, err = httpClient.Do(req)
 		if resp != nil {
 			return resp, nil
@@ -40,27 +40,27 @@ func SendHttp(method string, url string, body io.Reader, headers ...string) (*ht
 	return nil, err
 }
 
-// Get sends an HTTP GET request to the given URL signed with the bot's authorisation token
+// Get sends an HTTP GET request to the given URL signed with the bot's authorization token
 func Get(url string) (*http.Response, error) {
 	return SendHttp(http.MethodGet, url, nil)
 }
 
-// Post sends an HTTP POST request to the given URL signed with the bot's authorisation token
+// Post sends an HTTP POST request to the given URL signed with the bot's authorization token
 func Post(url string, body io.Reader) (*http.Response, error) {
 	return SendHttp(http.MethodPost, url, body, "Content-Type", "application/json")
 }
 
-// Delete sends an HTTP POST request to the given URL signed with the bot's authorisation token
+// Delete sends an HTTP POST request to the given URL signed with the bot's authorization token
 func Delete(url string) (*http.Response, error) {
 	return SendHttp(http.MethodDelete, url, nil)
 }
 
-// Patch sends an HTTP PATCH request to the given URL signed with the bot's authorisation token
+// Patch sends an HTTP PATCH request to the given URL signed with the bot's authorization token
 func Patch(url string, body []byte) (*http.Response, error) {
 	return SendHttp(http.MethodPatch, url, bytes.NewBuffer(body), "Content-Type", "application/json")
 }
 
-// Put sends an HTTP P{UT request to the given URL signed with the bot's authorisation token
+// Put sends an HTTP P{UT request to the given URL signed with the bot's authorization token
 func Put(url string, body []byte) (*http.Response, error) {
 	return SendHttp(http.MethodPut, url, bytes.NewBuffer(body), "Content-Type", "application/json")
 }

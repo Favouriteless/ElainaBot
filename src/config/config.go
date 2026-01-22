@@ -57,7 +57,7 @@ func GetSnowflake(key string) *discord.Snowflake {
 
 	i, err := strconv.ParseUint(str, 10, 64)
 	if err != nil {
-		slog.Error("Failed to load config value as snowflake: \"" + key + "\"")
+		slog.Error("[Elaina] Failed to load config value as snowflake: \"" + key + "\"")
 		return nil
 	}
 	s := discord.Snowflake(i)
@@ -65,13 +65,13 @@ func GetSnowflake(key string) *discord.Snowflake {
 }
 
 func InitializeConfig() (err error) {
-	slog.Info("Loading config...")
+	slog.Info("[Elaina] Loading config...")
 	config.values = defaultValues()
 
 	file, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			slog.Info("No config file found, using default values instead")
+			slog.Info("[Elaina] No config file found, using default values instead")
 			return nil
 		}
 		return err
@@ -88,7 +88,7 @@ func InitializeConfig() (err error) {
 			config.values[k] = v
 		} else {
 			missing = true
-			slog.Warn("Config file is missing value for key: \"" + k + "\"")
+			slog.Warn("[Elaina] Config file is missing value for key: \"" + k + "\"")
 		}
 	}
 
@@ -96,10 +96,10 @@ func InitializeConfig() (err error) {
 		if err = SaveConfig(); err != nil { // Saving the config again
 			return err
 		}
-		slog.Info("Generated missing config values in file")
+		slog.Info("[Elaina] Generated missing config values in file")
 	}
 
-	slog.Info("Config loaded")
+	slog.Info("[Elaina] Config loaded")
 	return nil
 }
 
