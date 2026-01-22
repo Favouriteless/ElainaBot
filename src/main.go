@@ -47,16 +47,26 @@ func main() {
 			panic(err)
 		}
 	default:
-		closeGateway := make(chan interface{}, 1)
-		discord.ListenGateway(intents, closeGateway)
+		handle := discord.ListenGateway(intents)
 
 		// Wait for a SIGINT or SIGTERM signal to gracefully shut down
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
 
-		closeGateway <- true
-		slog.Info("Shutting down...")
+		for {
+			select {
+			case <-sigChan:
+				slog.Info("Shutting down...")
+				handle.Close()
+			case err = <-handle.Done:
+				if err != nil {
+					slog.Error("Gateway connection closed with an error: " + err.Error())
+				} else {
+					slog.Info("Gateway connection closed")
+				}
+				return
+			}
+		}
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 
 const defaultQueueSize = 16
 
-// Websocket disconnect codes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes
+// Websocket Close codes as specified by https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes
 // Codes not needed for responses have not been included (e.g. encoding errors)
 const (
 	closeUnknownError         = 4000
@@ -28,7 +28,7 @@ const (
 	closeTimedOut             = 4009
 )
 
-var gatewayConnection *gateway
+var context *gateway
 
 var ErrInvalidResumeUrl = errors.New("invalid resume url")
 
@@ -50,30 +50,51 @@ type gateway struct {
 	heartbeatAcknowledged bool // Update to false when the client sends a sendHeartbeat. If discord doesn't acknowledge before the next sendHeartbeat, reconnect.
 }
 
+// GatewayHandle represents an active gateway connection with a disconnect and error channel. If a value is passed to
+// Disconnect, the gateway will close normally. Done signals that the connection has closed. If the gateway closed
+// normally, nil will be sent. Otherwise, the error causing the close will be sent.
+type GatewayHandle struct {
+	Done       <-chan error
+	Disconnect chan<- interface{}
+}
+
+func (h *GatewayHandle) Close() {
+	h.Disconnect <- true
+}
+
 // ListenGateway initializes the gateway struct and attempts to send a connection request to the API.
-func ListenGateway(intents int, quit <-chan interface{}) {
+func ListenGateway(intents int) *GatewayHandle {
 	slog.Info("Initializing gateway connection...")
 
+	done := make(chan error)
+	disconnect := make(chan interface{})
+
 	go func() {
-		gatewayConnection = &gateway{sendQueue: make(chan []byte, defaultQueueSize), intents: intents}
+		context = &gateway{sendQueue: make(chan []byte, defaultQueueSize), intents: intents}
+		disconnecting := atomic.Bool{}
 
 		go func() {
-			<-quit
-			slog.Info("Closing gateway connection")
-			gatewayConnection.cardiacArrest.Store(true)
-			_ = gatewayConnection.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
+			<-disconnect
+			disconnecting.Store(true)
+			context.cardiacArrest.Store(true)
+			_ = context.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
+			context.conn.Close()
 		}()
 
 		for {
-			reconnect, err := gatewayConnection.connect()
-			if err != nil {
-				slog.Error("Gateway connection error: " + err.Error())
-			}
-			if !reconnect {
-				break
+			if reconnect, err := context.connect(); !reconnect || disconnecting.Load() {
+				if disconnecting.Load() {
+					done <- nil
+				} else {
+					done <- err
+				}
+				return
 			}
 		}
+
 	}()
+
+	return &GatewayHandle{Done: done, Disconnect: disconnect}
 }
 
 // connect attempts to initialize a gateway connection. If resuming is true, the connection will attempt to resuming the
@@ -98,18 +119,18 @@ func (gateway *gateway) connect() (reconnect bool, err error) {
 	}
 	slog.Info("Websocket initialized")
 
-	gateway.cardiacArrest.Store(false)
-
 	var closeCode int
 	gateway.conn.SetCloseHandler(func(c int, t string) error {
 		closeCode = c
 		return nil
 	}) // Capture the close code after the wg finishes
 
+	gateway.cardiacArrest.Store(false)
+	gateway.wg.Add(1)
 	go gateway.handleWriting()
 	gateway.resuming, err = gateway.readUntilClosed(gateway.resuming)
 
-	gateway.cardiacArrest.Store(true) // Stop children & reset the connection state after the websocket disconnects
+	gateway.cardiacArrest.Store(true)
 	gateway.wg.Wait()
 
 	if err == nil { // No error means the reader received a reconnect request
@@ -143,6 +164,7 @@ func (gateway *gateway) readUntilClosed(resuming bool) (shouldResume bool, err e
 				panic(err) // Should never be hit
 			}
 			slog.Info("Starting heartbeats")
+			gateway.wg.Add(1)
 			go gateway.heartbeat(time.Millisecond * time.Duration(hello.HeartbeatInterval))
 			gateway.identify(resuming)
 		case opDispatch:
@@ -231,7 +253,6 @@ func (gateway *gateway) sendHeartbeat() {
 }
 
 func (gateway *gateway) heartbeat(interval time.Duration) {
-	gateway.wg.Add(1)
 	defer gateway.wg.Done()
 
 	ticker := time.NewTicker(interval)
@@ -259,7 +280,6 @@ func (gateway *gateway) heartbeat(interval time.Duration) {
 }
 
 func (gateway *gateway) handleWriting() {
-	gateway.wg.Add(1)
 	defer gateway.wg.Done()
 	for {
 		select {
