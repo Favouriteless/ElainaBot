@@ -1,4 +1,4 @@
-package elaina
+package main
 
 import (
 	"ElainaBot/config"
@@ -107,16 +107,61 @@ func RegisterCommands() {
 			Permissions: discord.PermAdministrator,
 			Handler:     setHoneypotHandler,
 		},
+		{
+			Name:        "ban",
+			Description: "Ban a user",
+			Type:        discord.CmdTypeChatInput,
+			Options: []discord.CommandOption{
+				{
+					Name:        "user",
+					Description: "User to ban",
+					Type:        discord.CmdOptUser,
+					Required:    true,
+				},
+				{
+					Name:        "duration",
+					Description: "Duration of ban in seconds",
+					Type:        discord.CmdOptInt,
+					Required:    false,
+				},
+				{
+					Name:        "reason",
+					Description: "Reason for ban",
+					Type:        discord.CmdOptString,
+					Required:    false,
+				},
+				{
+					Name:        "delete_messages",
+					Description: "If true, the last day of the users messages will be deleted",
+					Type:        discord.CmdOptBool,
+					Required:    false,
+				},
+			},
+			Permissions: discord.PermBan,
+			Handler:     banHandler,
+		},
+		{
+			Name:        "unban",
+			Description: "Ban a user",
+			Type:        discord.CmdTypeChatInput,
+			Options: []discord.CommandOption{
+				{
+					Name:        "user",
+					Description: "User to unban",
+					Type:        discord.CmdOptUser,
+					Required:    true,
+				},
+			},
+			Permissions: discord.PermBan,
+			Handler:     unbanHandler,
+		},
 	}
 }
 
 var customEmojiRegex = regexp.MustCompile("^<a?:.{2,}?:\\d{18,20}>$")
 
-func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
-	emoji, err := data.OptionByName("emoji").AsString()
-	if err != nil {
-		return err
-	}
+func setHelloHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	emoji := data.OptionByName("emoji").AsString()
 
 	var reply string
 	original := emoji
@@ -139,7 +184,7 @@ func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 
 	if updated {
 		config.SetString(config.HelloEmoji, emoji)
-		if err = config.SaveConfig(); err != nil {
+		if err := config.SaveConfig(); err != nil {
 			return err
 		}
 		reply = "Config has been updated! Hello emoji is now set to " + original
@@ -150,23 +195,17 @@ func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 	return discord.SendInteractionMessageResponse(discord.Message{Content: reply, Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func echoHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
-	echo, err := data.OptionByName("string").AsString()
-	if err != nil {
-		return err
-	}
-
+func echoHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	echo := data.OptionByName("string").AsString()
 	return discord.SendInteractionMessageResponse(discord.Message{Content: echo, Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func setMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) (err error) {
-	var macro Macro
-	if macro.Key, err = data.OptionByName("key").AsString(); err != nil {
-		return err
+func setMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) (err error) {
+	macro := Macro{
+		Key:      data.OptionByName("key").AsString(),
+		Response: data.OptionByName("response").AsString(),
 	}
-	if macro.Response, err = data.OptionByName("response").AsString(); err != nil {
-		return err
-	}
+
 	if err = SetMacro(macro); err != nil {
 		return err
 	}
@@ -175,18 +214,15 @@ func setMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 	return discord.SendInteractionMessageResponse(discord.Message{Content: "Macro set!", Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func deleteMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
-	key, err := data.OptionByName("key").AsString()
-	if err != nil {
-		return err
-	}
-
-	deleted, err := DeleteMacro(key)
+func deleteMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	key := data.OptionByName("key").AsString()
 
 	var response string
-	if deleted > 0 {
+	if deleted, err := DeleteMacro(key); err != nil {
+		return err
+	} else if deleted {
 		response = "Macro deleted"
-		slog.Info("Macro deleted:", slog.String("key", key))
+		slog.Info("[Elaina] Macro deleted: \"" + key + "\"")
 	} else {
 		response = "No macro found for \"" + key + "\""
 	}
@@ -194,11 +230,8 @@ func deleteMacroHandler(data discord.ApplicationCommandData, id discord.Snowflak
 	return discord.SendInteractionMessageResponse(discord.Message{Content: response, Flags: discord.MsgFlagEphemeral}, id, token)
 }
 
-func useMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
-	key, err := data.OptionByName("key").AsString()
-	if err != nil {
-		return err
-	}
+func useMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	key := data.OptionByName("key").AsString()
 	macro, err := GetMacro(key)
 	if err != nil {
 		return err
@@ -214,14 +247,11 @@ func useMacroHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 	return discord.SendInteractionMessageResponse(response, id, token)
 }
 
-func setHoneypotHandler(data discord.ApplicationCommandData, id discord.Snowflake, token string) error {
-	channel, err := data.OptionByName("channel").AsSnowflake()
-	if err != nil {
-		return err
-	}
+func setHoneypotHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	channel := data.OptionByName("channel").AsSnowflake()
 
 	config.SetSnowflake(config.HoneyPotChannel, channel)
-	if err = config.SaveConfig(); err != nil {
+	if err := config.SaveConfig(); err != nil {
 		return err
 	}
 
@@ -229,4 +259,42 @@ func setHoneypotHandler(data discord.ApplicationCommandData, id discord.Snowflak
 		Content: fmt.Sprintf("Honey pot channel set to: <#%s>", channel.String()),
 		Flags:   discord.MsgFlagEphemeral,
 	}, id, token)
+}
+
+func banHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	userId := data.OptionByName("user").AsSnowflake()
+	duration := 0
+	reason := "No reason specified"
+	del := false
+
+	if opt := data.OptionByName("duration"); opt != nil {
+		duration = opt.AsInt()
+	}
+	if opt := data.OptionByName("reason"); opt != nil {
+		reason = opt.AsString()
+	}
+	if opt := data.OptionByName("delete_messages"); opt != nil {
+		del = opt.AsBool()
+	}
+
+	// Deferred response because there's a bunch of API calls during the ban flow
+	err := discord.SendInteractionResponse(discord.InteractionResponse{Type: discord.RespTypeDeferredChannelMessage}, id, token)
+	if err != nil {
+		return err
+	}
+
+	user := data.ResolvedData.Users[userId]
+	if err := banUser(guildId, user, duration, reason, del); err != nil {
+		return err
+	}
+
+	return discord.EditInteractionResponse(user.Username+" was banned.", token)
+}
+
+func unbanHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
+	userId := data.OptionByName("user").AsSnowflake()
+	if err := unbanUser(guildId, userId); err != nil {
+		return err
+	}
+	return discord.SendInteractionMessageResponse(discord.Message{Content: userId.String() + " was unbanned."}, id, token)
 }

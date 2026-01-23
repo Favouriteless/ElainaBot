@@ -31,6 +31,22 @@ func SendInteractionMessageResponse(message Message, id Snowflake, token string)
 	return SendInteractionResponse(InteractionResponse{Type: RespTypeChannelMessage, Data: message}, id, token)
 }
 
+func EditInteractionResponse(content string, token string) error {
+	body, err := json.Marshal(struct {
+		Content string `json:"content"`
+	}{content})
+	if err != nil {
+		return err
+	}
+
+	resp, err := Patch(Url("webhooks", application.id, token, "messages", "@original"), body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 type InteractionResponse struct {
 	Type int         `json:"type"`
 	Data interface{} `json:"data"`

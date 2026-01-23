@@ -103,6 +103,35 @@ func (channel Channel) CreateMessage(content string, tts bool) (*Message, error)
 	return CreateMessage(channel.Id, content, tts)
 }
 
+func CreateDM(recipient Snowflake) (*Channel, error) {
+	body, err := json.Marshal(struct {
+		Recipient Snowflake `json:"recipient_id"`
+	}{recipient})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := Post(Url("users", "@me", "channels"), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("dm was not created: %s", resp.Status)
+	}
+
+	var channel Channel
+	if err = json.NewDecoder(resp.Body).Decode(&channel); err != nil {
+		return nil, err
+	}
+	return &channel, nil
+}
+
+func (user User) CreateDM() (*Channel, error) {
+	return CreateDM(user.Id)
+}
+
 func GetChannel(id Snowflake) (*Channel, error) {
 	return getCacheable(ChannelCache, id, "channels", id.String())
 }
@@ -176,4 +205,26 @@ func (guild Guild) CreateBan(userId Snowflake, deleteSeconds int) error {
 
 func (user User) CreateBan(guildId Snowflake, deleteSeconds int) error {
 	return CreateBan(guildId, user.Id, deleteSeconds)
+}
+
+func DeleteBan(guildId Snowflake, userId Snowflake) error {
+	resp, err := Delete(Url("guilds", guildId.String(), "bans", userId.String()))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func KickUser(guildId Snowflake, userId Snowflake) error {
+	resp, err := Delete(Url("guilds", guildId.String(), "members", userId.String()))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (guild Guild) KickUser(userId Snowflake) error {
+	return KickUser(guild.Id, userId)
 }

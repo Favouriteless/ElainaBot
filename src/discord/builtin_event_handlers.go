@@ -21,7 +21,7 @@ func interactionCreateEvent(payload InteractionCreatePayload) error { // Built-i
 		if c.Name == command.Name {
 			slog.Info("[Command] Dispatching application command: " + c.Name)
 
-			if err := command.Handler(c, payload.Id, payload.Token); err != nil {
+			if err := command.Handler(c, payload.GuildId, payload.Id, payload.Token); err != nil {
 				slog.Error("[Command] Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
 				_ = SendInteractionResponse(InteractionResponse{
 					Type: RespTypeChannelMessage,

@@ -1,4 +1,4 @@
-package elaina
+package main
 
 import (
 	"ElainaBot/config"
@@ -56,9 +56,8 @@ func banHoneypotEvent(payload discord.CreateMessagePayload) error {
 		return err
 	}
 
-	if err = discord.CreateBan(payload.GuildId, payload.Author.Id, 604800); err != nil {
+	if err = banUser(payload.GuildId, payload.Author, 900, "You typed in the honeypot channel", true); err != nil {
 		return err
 	}
-	slog.Info("[Honeypot] banned user: " + payload.Author.Username)
 	return nil
 }

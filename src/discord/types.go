@@ -126,12 +126,12 @@ type Message struct {
 	WebhookId Snowflake `json:"webhook_id,omitempty"` // Optional
 	Type      int       `json:"type"`
 	// Activity
-	Application       *App               `json:"application,omitempty"`        // Optional
-	ApplicationId     Snowflake          `json:"application_id,omitempty"`     // Optional
-	Flags             int                `json:"flags,omitempty"`              // Optional
-	MessageReference  []MessageReference `json:"message_reference,omitempty"`  // Optional
-	MessageSnapshots  []MessageSnapshot  `json:"message_snapshots,omitempty"`  // Optional
-	ReferencedMessage *MessageReference  `json:"referenced_message,omitempty"` // Optional, Nullable
+	Application       *App              `json:"application,omitempty"`        // Optional
+	ApplicationId     Snowflake         `json:"application_id,omitempty"`     // Optional
+	Flags             int               `json:"flags,omitempty"`              // Optional
+	MessageReference  MessageReference  `json:"message_reference,omitempty"`  // Optional
+	MessageSnapshots  []MessageSnapshot `json:"message_snapshots,omitempty"`  // Optional
+	ReferencedMessage *Message          `json:"referenced_message,omitempty"` // Optional, Nullable
 	// InteractionMetadata
 	Thread *Channel `json:"thread,omitempty"` // Optional
 	// Components
@@ -462,8 +462,8 @@ type UnavailableGuild struct {
 	Unavailable bool      `json:"unavailable"`
 }
 
-// Ban represents https://discord.com/developers/docs/resources/guild#ban-object
-type Ban struct {
+// GuildBan represents https://discord.com/developers/docs/resources/guild#ban-object
+type GuildBan struct {
 	User   User   `json:"user"`
 	Reason string `json:"reason"`
 }

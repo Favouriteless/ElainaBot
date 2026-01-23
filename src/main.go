@@ -3,7 +3,6 @@ package main
 import (
 	"ElainaBot/config"
 	"ElainaBot/discord"
-	"ElainaBot/elaina"
 	"flag"
 	"log/slog"
 	"os"
@@ -32,8 +31,8 @@ func main() {
 		panic(err)
 	}
 
-	elaina.RegisterEvents()
-	elaina.RegisterCommands()
+	RegisterEvents()
+	RegisterCommands()
 
 	deploy := flag.String("mode", "bot", "Update the running mode: deploy_commands=deploy application commands, deploy_db=deploy database")
 	commands := flag.String("commands", "", "Update the commands to deploy when using the --mode=deploy_commands")
@@ -43,10 +42,12 @@ func main() {
 	case "deploy_commands":
 		discord.DeployCommands(strings.Split(*commands, ",")...)
 	case "deploy_db":
-		if err = elaina.InitializeDatabase(); err != nil {
+		if err = InitializeDatabase(); err != nil {
 			panic(err)
 		}
 	default:
+		go deleteExpiredBans()
+
 		handle := discord.ListenGateway(intents)
 
 		// Wait for a SIGINT or SIGTERM signal to gracefully shut down

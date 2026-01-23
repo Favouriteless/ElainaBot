@@ -56,7 +56,7 @@ func AddCommand(command *ApplicationCommand) {
 	Commands = append(Commands, command)
 }
 
-type CommandHandler = func(data ApplicationCommandData, id Snowflake, token string) error
+type CommandHandler = func(data ApplicationCommandData, guildId Snowflake, id Snowflake, token string) error
 
 // ApplicationCommand represents https://discord.com/developers/docs/interactions/application-commands#application-command-object
 // as well as its responses https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
@@ -161,58 +161,44 @@ func (o *CommandOptionData) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (o *CommandOptionData) AsString() (string, error) {
-	if err := o.assertType(CmdOptString); err != nil {
-		return "", err
-	}
-	return o.Value.(string), nil
+func (o *CommandOptionData) AsString() string {
+	o.assertType(CmdOptString)
+	return o.Value.(string)
 }
 
-func (o *CommandOptionData) AsInt() (int, error) {
-	if err := o.assertType(CmdOptInt); err != nil {
-		return 0, err
-	}
-	return o.Value.(int), nil
+func (o *CommandOptionData) AsInt() int {
+	o.assertType(CmdOptInt)
+	return o.Value.(int)
 }
 
-func (o *CommandOptionData) AsBool() (bool, error) {
-	if err := o.assertType(CmdOptBool); err != nil {
-		return false, err
-	}
-	return o.Value.(bool), nil
+func (o *CommandOptionData) AsBool() bool {
+	o.assertType(CmdOptBool)
+	return o.Value.(bool)
 }
 
-func (o *CommandOptionData) AsSnowflake() (Snowflake, error) {
-	if err := o.assertSnowflake(); err != nil {
-		return 0, err
-	}
-	return o.Value.(Snowflake), nil
+func (o *CommandOptionData) AsSnowflake() Snowflake {
+	o.assertSnowflake()
+	return o.Value.(Snowflake)
 }
 
-func (o *CommandOptionData) AsFloat64() (float64, error) {
-	if err := o.assertType(CmdOptFloat64); err != nil {
-		return 0, err
-	}
-	return o.Value.(float64), nil
+func (o *CommandOptionData) AsFloat64() float64 {
+	o.assertType(CmdOptFloat64)
+	return o.Value.(float64)
 }
 
-func (o *CommandOptionData) AsAttachment() (*Attachment, error) {
-	if err := o.assertType(CmdOptAttachment); err != nil {
-		return nil, err
-	}
-	return o.Value.(*Attachment), nil
+func (o *CommandOptionData) AsAttachment() *Attachment {
+	o.assertType(CmdOptAttachment)
+	return o.Value.(*Attachment)
 }
 
-func (o *CommandOptionData) assertType(expected int) error {
+func (o *CommandOptionData) assertType(expected int) {
 	if o.Type != expected {
-		return fmt.Errorf("expected option of type %s but got %s", idToOptTypeName[expected], idToOptTypeName[o.Type])
+		panic(fmt.Errorf("expected option of type %s but got %s", idToOptTypeName[expected], idToOptTypeName[o.Type]))
 	}
-	return nil
 }
 
-func (o *CommandOptionData) assertSnowflake() error {
+func (o *CommandOptionData) assertSnowflake() {
 	if o.Type != CmdOptUser && o.Type != CmdOptChannel && o.Type != CmdOptRole && o.Type != CmdOptMentionable {
-		return errors.New("expected option of type snowflake but got " + idToOptTypeName[o.Type])
+		panic(errors.New("expected option of type snowflake but got " + idToOptTypeName[o.Type]))
 	}
-	return nil
 }
