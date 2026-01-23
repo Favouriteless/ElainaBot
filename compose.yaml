@@ -1,17 +1,22 @@
-name: elaina-testing
+name: elaina
 
 services:
-  elaina:
+  bot:
     image: elaina:latest
     volumes:
       - type: volume
-        source: devaina-data
+        source: elaina-data
         target: /run/data
-    environment:
-      ELAINA_DEBUG: $ELAINA_DEBUG
-      DEVAINA_CLIENT_SECRET: $DEVAINA_CLIENT_SECRET
-      DEVAINA_TOKEN: $DEVAINA_TOKEN
+    secrets:
+      - elaina-secret
+      - elaina-token
 
 volumes:
-  devaina-data:
+  elaina-data:
     external: true
+
+secrets:
+  elaina-secret:
+    environment: ELAINA_CLIENT_SECRET
+  elaina-token:
+    environment: ELAINA_TOKEN
