@@ -39,10 +39,14 @@ func Get(key string) any {
 	return val
 }
 
-func Set(key string, value any) {
+func SetString(key string, value string) {
 	config.mutex.Lock()
 	config.values[key] = value
 	config.mutex.Unlock()
+}
+
+func SetSnowflake(key string, value discord.Snowflake) {
+	SetString(key, value.String())
 }
 
 func GetString(key string) string {

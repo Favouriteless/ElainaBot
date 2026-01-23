@@ -290,7 +290,7 @@ type Channel struct {
 	Name                          string           `json:"name"`                               // Optional, nullable
 	Topic                         string           `json:"topic"`                              // Optional, nullable
 	Nsfw                          *bool            `json:"nsfw"`                               // Optional
-	LastMessageId                 Snowflake        `json:"last_message_id"`                    // Optional, nullable
+	LastMessageId                 *Snowflake       `json:"last_message_id"`                    // Optional, nullable
 	Bitrate                       *int             `json:"bitrate"`                            // Optional
 	UserLimit                     *int             `json:"user_limit"`                         // Optional
 	RateLimitPerUser              *int             `json:"rate_limit_per_user"`                // Optional
@@ -317,6 +317,15 @@ type Channel struct {
 	DefaultThreadRateLimitPerUser *int             `json:"default_thread_rate_limit_per_user"` // Optional
 	DefaultSortOrder              *int             `json:"default_sort_order"`                 // Optional
 	DefaultForumLayout            *int             `json:"default_forum_layout"`               // Optional
+}
+
+func (channel Channel) GetOverwrite(role Snowflake) *Overwrite {
+	for _, overwrite := range channel.PermissionOverwrites {
+		if overwrite.Id == role {
+			return &overwrite
+		}
+	}
+	return nil
 }
 
 // Overwrite represents https://discord.com/developers/docs/resources/channel#overwrite-object
@@ -445,4 +454,16 @@ type ResolvedData struct {
 	Channels    map[Snowflake]Channel     `json:"channels"`
 	Messages    map[Snowflake]Message     `json:"messages"`
 	Attachments map[Snowflake]Attachment  `json:"discord.Attachments"`
+}
+
+// UnavailableGuild represents https://discord.com/developers/docs/resources/guild#unavailable-guild-object
+type UnavailableGuild struct {
+	Id          Snowflake `json:"id"`
+	Unavailable bool      `json:"unavailable"`
+}
+
+// Ban represents https://discord.com/developers/docs/resources/guild#ban-object
+type Ban struct {
+	User   User   `json:"user"`
+	Reason string `json:"reason"`
 }

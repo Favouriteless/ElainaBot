@@ -138,3 +138,11 @@ type DeleteRolePayload struct {
 	GuildId Snowflake `json:"guild_id"`
 	RoleId  Snowflake `json:"role_id"`
 }
+
+// UpdateGuildPayload is sent by discord when a guild is updated.
+// https://discord.com/developers/docs/events/gateway-events#guild-update
+type UpdateGuildPayload = Guild
+
+// DeleteGuildPayload is sent by discord when a guild is created, becomes unavailable or the user leaves a guild.
+// https://discord.com/developers/docs/events/gateway-events#guild-delete
+type DeleteGuildPayload = UnavailableGuild

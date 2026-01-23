@@ -2,6 +2,7 @@ package discord
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -124,36 +125,39 @@ type CommandOptionData struct {
 }
 
 func (o *CommandOptionData) UnmarshalJSON(data []byte) error {
-	var partial struct {
+	var p struct {
 		Name  string `json:"name"`
 		Type  int    `json:"type"`
 		Value json.RawMessage
 	}
-	if err := json.Unmarshal(data, &partial); err != nil {
+	if err := json.Unmarshal(data, &p); err != nil {
 		return err
 	}
-	o.Name = partial.Name
-	o.Type = partial.Type
+	o.Name = p.Name
+	o.Type = p.Type
 
-	switch partial.Type {
-	case 4: // Int needs special handling because unmarshal defaults to a float64 & the interface cast would break
+	if p.Type == 4 { // Int needs special handling because unmarshal defaults to a float64 & the interface cast would break
 		var i int
-		if err := json.Unmarshal(partial.Value, &i); err != nil {
+		if err := json.Unmarshal(p.Value, &i); err != nil {
 			return err
 		}
 		o.Value = i
-	case 11:
+	} else if p.Type == 11 {
 		var a Attachment
-		if err := json.Unmarshal(partial.Value, &a); err != nil {
+		if err := json.Unmarshal(p.Value, &a); err != nil {
 			return err
 		}
 		o.Value = a
-	default:
-		// Default unmarshal behaviour: Bool -> bool, Num -> float64, String -> string (Snowflake), Null -> nil
-		if err := json.Unmarshal(partial.Value, &o.Value); err != nil {
+	} else if p.Type == 6 || p.Type == 7 || p.Type == 8 || p.Type == 9 {
+		var s Snowflake
+		if err := json.Unmarshal(p.Value, &s); err != nil {
 			return err
 		}
+		o.Value = s
+	} else if err := json.Unmarshal(p.Value, &o.Value); err != nil {
+		return err // Default unmarshal behaviour: Bool -> bool, Num -> float64, String -> string (Snowflake), Null -> nil
 	}
+
 	return nil
 }
 
@@ -179,7 +183,7 @@ func (o *CommandOptionData) AsBool() (bool, error) {
 }
 
 func (o *CommandOptionData) AsSnowflake() (Snowflake, error) {
-	if err := o.assertType(CmdOptUser); err != nil {
+	if err := o.assertSnowflake(); err != nil {
 		return 0, err
 	}
 	return o.Value.(Snowflake), nil
@@ -202,6 +206,13 @@ func (o *CommandOptionData) AsAttachment() (*Attachment, error) {
 func (o *CommandOptionData) assertType(expected int) error {
 	if o.Type != expected {
 		return fmt.Errorf("expected option of type %s but got %s", idToOptTypeName[expected], idToOptTypeName[o.Type])
+	}
+	return nil
+}
+
+func (o *CommandOptionData) assertSnowflake() error {
+	if o.Type != CmdOptUser && o.Type != CmdOptChannel && o.Type != CmdOptRole && o.Type != CmdOptMentionable {
+		return errors.New("expected option of type snowflake but got " + idToOptTypeName[o.Type])
 	}
 	return nil
 }

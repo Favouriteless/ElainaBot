@@ -10,6 +10,25 @@ import (
 	"slices"
 )
 
+func getCacheable[T any](cache *ResourceCache[T], id Snowflake, urlParts ...string) (*T, error) {
+	if val := cache.Get(id); val != nil {
+		return val, nil
+	}
+
+	resp, err := Get(Url(urlParts...))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var val T
+	if err = json.NewDecoder(resp.Body).Decode(&val); err != nil {
+		return nil, err
+	}
+	cache.Add(id, val)
+	return &val, nil
+}
+
 func DeployCommand(command *ApplicationCommand) (*http.Response, error) {
 	enc, err := json.Marshal(command)
 	if err != nil {
@@ -80,56 +99,32 @@ func CreateMessage(channel Snowflake, content string, tts bool) (*Message, error
 	return &message, nil
 }
 
+func (channel Channel) CreateMessage(content string, tts bool) (*Message, error) {
+	return CreateMessage(channel.Id, content, tts)
+}
+
 func GetChannel(id Snowflake) (*Channel, error) {
-	if channel := ChannelCache.Get(id); channel != nil {
-		return channel, nil
-	}
-
-	resp, err := Get(Url("channels", id.String()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var channel Channel
-	if err = json.NewDecoder(resp.Body).Decode(&channel); err != nil {
-		return nil, err
-	}
-	ChannelCache.Add(id, channel)
-	return &channel, nil
+	return getCacheable(ChannelCache, id, "channels", id.String())
 }
 
 func GetRole(guildId Snowflake, roleId Snowflake) (*Role, error) {
-	if role := RoleCache.Get(roleId); role != nil {
-		return role, nil
-	}
+	return getCacheable(RoleCache, roleId, "guilds", guildId.String(), "roles", roleId.String())
+}
 
-	resp, err := Get(Url("guilds", guildId.String(), "roles", roleId.String()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var role Role
-	if err = json.NewDecoder(resp.Body).Decode(&role); err != nil {
-		return nil, err
-	}
-	RoleCache.Add(roleId, role)
-	return &role, nil
+func (guild Guild) GetRole(id Snowflake) (*Role, error) {
+	return GetRole(guild.Id, id)
 }
 
 func GetGuildMember(guild Snowflake, guildMemberId Snowflake) (*GuildMember, error) {
-	resp, err := Get(Url("guilds", guild.String(), "members", guildMemberId.String()))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	return getCacheable(GuildMemberCache, guildMemberId, "guilds", guild.String(), "members", guildMemberId.String())
+}
 
-	var guildMember GuildMember
-	if err = json.NewDecoder(resp.Body).Decode(&guildMember); err != nil {
-		return nil, err
-	}
-	return &guildMember, nil
+func (guild Guild) GetGuildMember(id Snowflake) (*GuildMember, error) {
+	return GetGuildMember(guild.Id, id)
+}
+
+func GetGuild(id Snowflake) (*Guild, error) {
+	return getCacheable(GuildCache, id, "guilds", id.String())
 }
 
 // CreateReaction creates a reaction to a message using the bot account. emoji must be either a Unicode emoji for
@@ -149,4 +144,36 @@ func CreateReaction(channelId Snowflake, messageId Snowflake, emoji string) erro
 		return fmt.Errorf("reaction was not created: %s: %s", resp.Status, string(body))
 	}
 	return nil
+}
+
+func (channel Channel) CreateReaction(messageId Snowflake, emoji string) error {
+	return CreateReaction(channel.Id, messageId, emoji)
+}
+
+func (message Message) CreateReaction(emoji string) error {
+	return CreateReaction(message.ChannelId, message.Id, emoji)
+}
+
+func CreateBan(guildId Snowflake, userId Snowflake, deleteSeconds int) error {
+	enc, err := json.Marshal(struct {
+		Seconds int `json:"delete_message_seconds"`
+	}{deleteSeconds})
+	if err != nil {
+		return err
+	}
+
+	resp, err := Put(Url("guilds", guildId.String(), "bans", userId.String()), enc)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (guild Guild) CreateBan(userId Snowflake, deleteSeconds int) error {
+	return CreateBan(guild.Id, userId, deleteSeconds)
+}
+
+func (user User) CreateBan(guildId Snowflake, deleteSeconds int) error {
+	return CreateBan(guildId, user.Id, deleteSeconds)
 }

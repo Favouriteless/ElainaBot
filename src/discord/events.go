@@ -17,6 +17,8 @@ var Events = &EventDispatcher{
 	DeleteChannel:     Event[DeleteChannelPayload]{Name: "CHANNEL_UPDATE", builtin: []EventHandler[DeleteChannelPayload]{deleteChannelEvent}},
 	UpdateRole:        Event[UpdateRolePayload]{Name: "GUILD_ROLE_UPDATE", builtin: []EventHandler[UpdateRolePayload]{updateRoleEvent}},
 	DeleteRole:        Event[DeleteRolePayload]{Name: "GUILD_ROLE_UPDATE", builtin: []EventHandler[DeleteRolePayload]{deleteRoleEvent}},
+	UpdateGuild:       Event[UpdateGuildPayload]{Name: "GUILD_UPDATE", builtin: []EventHandler[UpdateGuildPayload]{updateGuildEvent}},
+	DeleteGuild:       Event[DeleteGuildPayload]{Name: "GUILD_DELETE", builtin: []EventHandler[DeleteGuildPayload]{deleteGuildEvent}},
 }
 
 // Event represents a deserialization and handler dispatcher for a type of Event. Built-in handlers will
@@ -28,7 +30,7 @@ type Event[T any] struct {
 }
 
 // EventHandler is called when an event it is registered to fires. Events are called in order.
-type EventHandler[T any] = func(T)
+type EventHandler[T any] = func(T) error
 
 // Register an event handler to be run when an event of this type is received by the gateway. Multiple handlers can be
 // registered for a single type.
@@ -48,6 +50,8 @@ type EventDispatcher struct {
 	DeleteChannel     Event[DeleteChannelPayload]
 	UpdateRole        Event[UpdateRolePayload]
 	DeleteRole        Event[DeleteRolePayload]
+	UpdateGuild       Event[UpdateGuildPayload]
+	DeleteGuild       Event[DeleteGuildPayload]
 }
 
 // dispatch decodes the given json-encoded []byte and dispatches it as an event
@@ -60,11 +64,16 @@ func (event *Event[T]) dispatch(raw []byte) {
 		slog.Error("[Event] Failed to parse gateway event: " + err.Error())
 		return
 	}
+
 	for _, handler := range event.handlers {
-		handler(data)
+		if err := handler(data); err != nil {
+			slog.Error("[Event] Failed to execute event handler: " + err.Error())
+		}
 	}
 	for _, handler := range event.builtin {
-		handler(data)
+		if err := handler(data); err != nil {
+			slog.Error("[Event] Failed to execute built-in event handler: " + err.Error())
+		}
 	}
 }
 
@@ -79,9 +88,9 @@ func (gateway *gateway) dispatchEvent(name string, raw []byte) {
 		}
 		gateway.resumeUrl = payload.ResumeGatewayUrl
 		gateway.sessionId = payload.SessionId
-		slog.Info("[Event] Gateway connection established")
+		slog.Info("[Gateway] Gateway connection established")
 	case "RESUME":
-		slog.Info("[Event] Gateway connection resumed") // Payload doesn't need to be read here, only care for logging
+		slog.Info("[Gateway] Gateway connection resumed") // Payload doesn't need to be read here, only care for logging
 	case Events.CreateMessage.Name:
 		Events.CreateMessage.dispatch(raw)
 	case Events.UpdateMessage.Name:
@@ -104,5 +113,9 @@ func (gateway *gateway) dispatchEvent(name string, raw []byte) {
 		Events.UpdateRole.dispatch(raw)
 	case Events.DeleteRole.Name:
 		Events.DeleteRole.dispatch(raw)
+	case Events.UpdateGuild.Name:
+		Events.UpdateGuild.dispatch(raw)
+	case Events.DeleteGuild.Name:
+		Events.DeleteGuild.dispatch(raw)
 	}
 }

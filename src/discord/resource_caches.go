@@ -5,6 +5,8 @@ import "sync"
 var RoleCache = CreateCache[Role](10)
 var MessageCache = CreateCache[Message](50)
 var ChannelCache = CreateCache[Channel](20)
+var GuildCache = CreateCache[Guild](3)
+var GuildMemberCache = CreateCache[GuildMember](10)
 
 // ResourceCache stores the last N objects passed to it in a fixed-size slice. Lookups in both direction run in O(1)
 type ResourceCache[V any] struct {

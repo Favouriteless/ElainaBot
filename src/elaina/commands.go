@@ -138,7 +138,7 @@ func setHelloHandler(data discord.ApplicationCommandData, id discord.Snowflake, 
 	}
 
 	if updated {
-		config.Set(config.HelloEmoji, emoji)
+		config.SetString(config.HelloEmoji, emoji)
 		if err = config.SaveConfig(); err != nil {
 			return err
 		}
@@ -220,24 +220,13 @@ func setHoneypotHandler(data discord.ApplicationCommandData, id discord.Snowflak
 		return err
 	}
 
-	fetched, err := discord.GetChannel(channel)
-	if err != nil {
-		return err
-	}
-	if fetched == nil {
-		return discord.SendInteractionMessageResponse(discord.Message{
-			Content: "Could not find channel: " + channel.String(),
-			Flags:   discord.MsgFlagEphemeral,
-		}, id, token)
-	}
-
-	config.Set(config.HoneyPotChannel, channel)
+	config.SetSnowflake(config.HoneyPotChannel, channel)
 	if err = config.SaveConfig(); err != nil {
 		return err
 	}
 
 	return discord.SendInteractionMessageResponse(discord.Message{
-		Content: fmt.Sprintf("Honey pot channel set to: <#%s>", channel),
+		Content: fmt.Sprintf("Honey pot channel set to: <#%s>", channel.String()),
 		Flags:   discord.MsgFlagEphemeral,
 	}, id, token)
 }
