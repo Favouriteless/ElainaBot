@@ -120,18 +120,17 @@ func deleteExpiredBans() {
 
 	for {
 		now := <-ticker.C
-		bans, err := GetAllBans()
+		unix := now.Unix()
+
+		bans, err := GetExpiredBans(unix)
 		if err != nil {
 			slog.Error("[Elaina] Failed to check bans: " + err.Error())
 			return
 		}
 
-		unix := now.Unix()
 		for _, ban := range bans {
-			if unix >= ban.Expires {
-				if err = unbanUser(ban.Guild, ban.User); err != nil {
-					slog.Error("[Elaina] Failed to unban user: " + err.Error())
-				}
+			if err = unbanUser(ban.Guild, ban.User); err != nil {
+				slog.Error("[Elaina] Failed to unban user: " + err.Error())
 			}
 		}
 	}

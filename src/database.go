@@ -85,14 +85,14 @@ func DeleteBan(guild discord.Snowflake, user discord.Snowflake) error {
 	return err
 }
 
-func GetAllBans() ([]Ban, error) {
+func GetExpiredBans(time int64) ([]Ban, error) {
 	db, err := sql.Open("sqlite", database)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 
-	rows, err := db.Query(`SELECT * FROM Ban`)
+	rows, err := db.Query(`SELECT * FROM Ban WHERE expires<=?`, time)
 	if err != nil {
 		return nil, err
 	}
