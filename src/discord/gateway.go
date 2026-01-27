@@ -197,13 +197,12 @@ type gatewayPayload struct {
 
 // sendPayload sends the given gatewayPayload on the websocket connection if one is open, or errors if there is no valid
 // connection or the payload fails to encode
-func (gateway *gateway) sendPayload(payload *gatewayPayload) error {
+func (gateway *gateway) sendPayload(payload *gatewayPayload) {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		panic(err) // Should never be hit, this state is unrecoverable
 	}
 	gateway.sendQueue <- encoded
-	return nil
 }
 
 // Identify sends either an IDENTIFY or RESUME packet depending on the value of resuming
@@ -217,9 +216,8 @@ func (gateway *gateway) identify(resume bool) {
 		if err != nil {
 			panic(err) // Should never be hit
 		}
-		if err = gateway.sendPayload(&gatewayPayload{Opcode: opResume, Data: (*json.RawMessage)(&id)}); err != nil {
-			panic(err) // Should never be hit
-		}
+
+		gateway.sendPayload(&gatewayPayload{Opcode: opResume, Data: (*json.RawMessage)(&id)})
 		slog.Info("[Gateway] Resuming connection")
 		return
 	}
@@ -231,9 +229,8 @@ func (gateway *gateway) identify(resume bool) {
 	if err != nil {
 		panic(err) // Should never be hit
 	}
-	if err = gateway.sendPayload(&gatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&enc)}); err != nil {
-		panic(err) // Should never be hit
-	}
+
+	gateway.sendPayload(&gatewayPayload{Opcode: opIdentify, Data: (*json.RawMessage)(&enc)})
 	slog.Info("[Gateway] Identifying connection")
 }
 
@@ -243,10 +240,7 @@ func (gateway *gateway) sendHeartbeat() {
 		panic(err) // should never be hit
 	}
 
-	if err = gateway.sendPayload(&gatewayPayload{Opcode: opHeartbeat, Data: (*json.RawMessage)(&data)}); err != nil {
-		slog.Error("[Gateway] Failed to send heartbeat: " + err.Error())
-		return
-	}
+	gateway.sendPayload(&gatewayPayload{Opcode: opHeartbeat, Data: (*json.RawMessage)(&data)})
 	gateway.heartbeatAcknowledged = false
 }
 

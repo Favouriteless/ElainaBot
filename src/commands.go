@@ -202,6 +202,7 @@ func echoHandler(data discord.ApplicationCommandData, guildId discord.Snowflake,
 
 func setMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) (err error) {
 	macro := Macro{
+		Guild:    guildId,
 		Key:      data.OptionByName("key").AsString(),
 		Response: data.OptionByName("response").AsString(),
 	}
@@ -218,7 +219,7 @@ func deleteMacroHandler(data discord.ApplicationCommandData, guildId discord.Sno
 	key := data.OptionByName("key").AsString()
 
 	var response string
-	if deleted, err := DeleteMacro(key); err != nil {
+	if deleted, err := DeleteMacro(guildId, key); err != nil {
 		return err
 	} else if deleted {
 		response = "Macro deleted"
@@ -232,7 +233,7 @@ func deleteMacroHandler(data discord.ApplicationCommandData, guildId discord.Sno
 
 func useMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
 	key := data.OptionByName("key").AsString()
-	macro, err := GetMacro(key)
+	macro, err := GetMacro(guildId, key)
 	if err != nil {
 		return err
 	}
