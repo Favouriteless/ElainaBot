@@ -1,4 +1,4 @@
-package main
+package elaina
 
 import "ElainaBot/discord"
 
@@ -15,4 +15,17 @@ type Ban struct {
 	User    discord.Snowflake `json:"user"`
 	Expires int64             `json:"expires"` // Unix timestamp
 	Reason  string            `json:"reason"`
+}
+
+// GuildSettings represents the config of a single guild.
+type GuildSettings struct {
+	HoneypotChannel *discord.Snowflake `json:"honeypot_channel"`
+	HelloEnabled    bool               `json:"hello_enabled"`
+}
+
+func DefaultGuildSettings() GuildSettings {
+	return GuildSettings{
+		HoneypotChannel: nil,
+		HelloEnabled:    false,
+	}
 }

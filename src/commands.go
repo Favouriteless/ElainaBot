@@ -2,7 +2,9 @@ package main
 
 import (
 	"ElainaBot/config"
+	"ElainaBot/database"
 	"ElainaBot/discord"
+	"ElainaBot/elaina"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -201,13 +203,13 @@ func echoHandler(data discord.ApplicationCommandData, guildId discord.Snowflake,
 }
 
 func setMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) (err error) {
-	macro := Macro{
+	macro := elaina.Macro{
 		Guild:    guildId,
 		Key:      data.OptionByName("key").AsString(),
 		Response: data.OptionByName("response").AsString(),
 	}
 
-	if err = SetMacro(macro); err != nil {
+	if err = database.CreateOrUpdateMacro(macro); err != nil {
 		return err
 	}
 	slog.Info("Macro set:", slog.String("key", macro.Key), slog.String("response", macro.Response))
@@ -219,7 +221,7 @@ func deleteMacroHandler(data discord.ApplicationCommandData, guildId discord.Sno
 	key := data.OptionByName("key").AsString()
 
 	var response string
-	if deleted, err := DeleteMacro(guildId, key); err != nil {
+	if deleted, err := database.DeleteMacro(guildId, key); err != nil {
 		return err
 	} else if deleted {
 		response = "Macro deleted"
@@ -233,7 +235,7 @@ func deleteMacroHandler(data discord.ApplicationCommandData, guildId discord.Sno
 
 func useMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
 	key := data.OptionByName("key").AsString()
-	macro, err := GetMacro(guildId, key)
+	macro, err := database.GetMacro(guildId, key)
 	if err != nil {
 		return err
 	}
@@ -251,8 +253,12 @@ func useMacroHandler(data discord.ApplicationCommandData, guildId discord.Snowfl
 func setHoneypotHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, id discord.Snowflake, token string) error {
 	channel := data.OptionByName("channel").AsSnowflake()
 
-	config.SetSnowflake(config.HoneyPotChannel, channel)
-	if err := config.SaveConfig(); err != nil {
+	settings, err := database.GetGuildSettings(guildId)
+	if err != nil {
+		return err
+	}
+	settings.HoneypotChannel = &channel
+	if err = database.CreateOrUpdateGuildSettings(guildId, settings); err != nil {
 		return err
 	}
 
@@ -279,11 +285,9 @@ func banHandler(data discord.ApplicationCommandData, guildId discord.Snowflake, 
 	}
 
 	// Deferred response because there's a bunch of API calls during the ban flow
-	err := discord.SendInteractionResponse(discord.InteractionResponse{Type: discord.RespTypeDeferredChannelMessage}, id, token)
-	if err != nil {
+	if err := discord.SendInteractionResponse(discord.InteractionResponse{Type: discord.RespTypeDeferredChannelMessage}, id, token); err != nil {
 		return err
 	}
-
 	user := data.ResolvedData.Users[userId]
 	if err := banUser(guildId, user, duration, reason, del); err != nil {
 		return err
@@ -297,5 +301,6 @@ func unbanHandler(data discord.ApplicationCommandData, guildId discord.Snowflake
 	if err := unbanUser(guildId, userId); err != nil {
 		return err
 	}
+
 	return discord.SendInteractionMessageResponse(discord.Message{Content: userId.String() + " was unbanned."}, id, token)
 }

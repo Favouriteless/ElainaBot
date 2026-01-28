@@ -2,6 +2,7 @@ package main
 
 import (
 	"ElainaBot/config"
+	"ElainaBot/database"
 	"ElainaBot/discord"
 	"flag"
 	"log/slog"
@@ -41,9 +42,9 @@ func main() {
 	case "deploy_commands":
 		discord.DeployCommands(strings.Split(*commands, ",")...)
 	case "deploy_db":
-		deployDatabase(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
+		database.Deploy(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
 	case "bot":
-		conn := connectDatabase(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
+		conn := database.Connect(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
 		defer conn.Close()
 
 		handle := discord.ListenGateway(intents)
@@ -102,12 +103,4 @@ func dockerSecret(fileName string) string {
 		panic(err) // We can't start the bot if secrets fail to load
 	}
 	return string(file)
-}
-
-// assertIsNil panics if the given error is not nil. This should only be used in scenarios where the error is both
-// unrecoverable and caused by a developer mistake
-func assertIsNil(err error) {
-	if err != nil {
-		panic(err)
-	}
 }

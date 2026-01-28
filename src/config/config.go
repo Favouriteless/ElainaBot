@@ -14,14 +14,12 @@ const configPath = "data/config.json"
 const (
 	HelloEmoji        = "hello_emoji"
 	DefaultHelloEmoji = "default_hello_emoji"
-	HoneyPotChannel   = "honey_pot_channel"
 )
 
 func defaultValues() map[string]any {
 	return map[string]any{
 		HelloEmoji:        "elainastare:1462289034188689468",
 		DefaultHelloEmoji: "elainastare:1462289034188689468",
-		HoneyPotChannel:   "",
 	}
 }
 

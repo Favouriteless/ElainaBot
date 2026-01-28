@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ElainaBot/database"
 	"ElainaBot/discord"
 	"errors"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 
 func getMemberPerms(guild discord.Guild, member discord.GuildMember, user discord.Snowflake) (discord.Permissions, error) {
 	if guild.OwnerId == user {
-		return 1<<63 - 1, nil
+		return 1<<64 - 1, nil
 	}
 
 	everyone, err := guild.GetRole(guild.Id)
@@ -32,7 +33,7 @@ func getMemberPerms(guild discord.Guild, member discord.GuildMember, user discor
 	}
 
 	if perms&discord.PermAdministrator == discord.PermAdministrator {
-		return 1<<63 - 1, nil
+		return 1<<64 - 1, nil
 	}
 
 	return perms, nil
@@ -90,7 +91,7 @@ func banUser(guild discord.Snowflake, user discord.User, duration int, reason st
 		slog.Error("[Elaina] Failed to create DM message: " + err.Error())
 	}
 
-	if err = CreateBan(guild, user.Id, expires, reason); err != nil {
+	if err = database.CreateOrUpdateBan(guild, user.Id, expires, reason); err != nil {
 		return err
 	}
 	if deleteMessages {
@@ -107,7 +108,7 @@ func unbanUser(guild discord.Snowflake, user discord.Snowflake) error {
 	if err := discord.DeleteBan(guild, user); err != nil {
 		return err
 	}
-	err := DeleteBan(guild, user)
+	err := database.DeleteBan(guild, user)
 	if err == nil {
 		slog.Info("[Elaina] Unbanned user: " + user.String())
 	}
@@ -117,12 +118,12 @@ func unbanUser(guild discord.Snowflake, user discord.Snowflake) error {
 func deleteExpiredBans() {
 	ticker := time.NewTicker(time.Second * 30)
 	defer ticker.Stop()
-
+	// TODO: This global delete bans routine doesn't work with sharding
 	for {
 		now := <-ticker.C
 		unix := now.Unix()
 
-		bans, err := GetExpiredBans(unix)
+		bans, err := database.GetExpiredBans(unix)
 		if err != nil {
 			slog.Error("[Elaina] Failed to check bans: " + err.Error())
 			return

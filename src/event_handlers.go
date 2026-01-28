@@ -2,6 +2,7 @@ package main
 
 import (
 	"ElainaBot/config"
+	"ElainaBot/database"
 	"ElainaBot/discord"
 	"log/slog"
 	"regexp"
@@ -37,10 +38,19 @@ func respondToNameEvent(payload discord.CreateMessagePayload) error {
 }
 
 func banHoneypotEvent(payload discord.CreateMessagePayload) error {
-	honeypot := config.GetSnowflake(config.HoneyPotChannel)
-	if honeypot == nil || payload.ChannelId != *honeypot || payload.Author.Bot || payload.GuildId == 0 {
-		return nil // We don't want to ban bots or people in the wrong channel
+	if payload.Author.Bot || payload.GuildId == 0 {
+		return nil
 	}
+
+	settings, err := database.GetGuildSettings(payload.GuildId)
+	if err != nil {
+		return err
+	}
+
+	if settings.HoneypotChannel == nil || payload.ChannelId != *settings.HoneypotChannel {
+		return nil
+	}
+
 	guild, err := discord.GetGuild(payload.GuildId)
 	if err != nil {
 		return err

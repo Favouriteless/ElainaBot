@@ -1,0 +1,3 @@
+ALTER TABLE macro CHANGE guild guild_id BIGINT UNSIGNED;
+
+ALTER TABLE ban CHANGE guild guild_id BIGINT UNSIGNED;
