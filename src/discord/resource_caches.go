@@ -4,108 +4,129 @@ import (
 	"sync"
 )
 
-var RoleCache = CreateCache[Role](10)
-var MessageCache = CreateCache[Message](50)
-var ChannelCache = CreateCache[Channel](20)
-var GuildCache = CreateCache[Guild](3)
-var GuildMemberCache = CreateCache[GuildMember](10)
+var RoleCache = CreateCache[Snowflake, Role](10)
+var MessageCache = CreateCache[Snowflake, Message](50)
+var ChannelCache = CreateCache[Snowflake, Channel](20)
+var GuildCache = CreateCache[Snowflake, Guild](3)
+var GuildMemberCache = CreateCache[Snowflake, GuildMember](10)
 
-// ResourceCache stores the last N objects passed to it in a fixed-size slice. Lookups in both direction run in O(1)
-type ResourceCache[V any] struct {
-	values   []V
-	records  []readRecord       // Map of id -> access count. Incremented each total an element is read, decremented after N reads.
-	id2index map[Snowflake]byte // Map of obj id -> values index
-	index2id []Snowflake        // Map of values index -> obj id
-	buffer   []int16            // Circular buffer storing the history of indexes read from
-	head     byte
-	size     byte
+// LRUCache stores the last N objects passed to it in a fixed-size slice. Both read and write run in O(1),
+// implemented as a doubly linked list with a hash table for fast lookups.
+type LRUCache[K comparable, V any] struct {
+	head     *cacheNode[K, V]
+	tail     *cacheNode[K, V]
+	index    map[K]*cacheNode[K, V]
+	length   int
+	capacity int
 	mutex    sync.RWMutex
 }
 
-type readRecord struct {
-	count byte  // Number of times the record was read in the last N reads
-	total int64 // Time of the last read in nanoseconds
+type cacheNode[K comparable, V any] struct {
+	key   K
+	value V
+	next  *cacheNode[K, V]
+	prev  *cacheNode[K, V]
 }
 
-// CreateCache initializes a ResourceCache with the given size and returns a pointer to it
-func CreateCache[V any](size byte) *ResourceCache[V] {
-	out := ResourceCache[V]{
-		values:   make([]V, size),
-		records:  make([]readRecord, size),
-		id2index: make(map[Snowflake]byte, size),
-		index2id: make([]Snowflake, size),
-		buffer:   make([]int16, size),
-		size:     size,
+// pop this node out of the list, stitching the two adjacent nodes together
+func (n *cacheNode[K, V]) pop() {
+	if n.prev != nil {
+		n.prev.next = n.next
 	}
-	for i := 0; byte(i) < size; i++ {
-		out.buffer[i] = -1 // Buffer gets initialized with -1, meaning no value
+	if n.next != nil {
+		n.next.prev = n.prev
 	}
-	return &out
+	n.prev = nil
+	n.next = nil
 }
 
-func (c *ResourceCache[V]) Get(key Snowflake) *V {
+// CreateCache initializes a LRUCache with the given capacity and returns a pointer to it
+func CreateCache[K comparable, V any](capacity int) *LRUCache[K, V] {
+	return &LRUCache[K, V]{
+		index:    make(map[K]*cacheNode[K, V]),
+		capacity: capacity,
+	}
+}
+
+func (c *LRUCache[K, V]) Get(key K) *V {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	if i, exists := c.id2index[key]; exists {
-		c.records[i].count++ // Update read record of value
-		c.records[i].total++
+	if node, exists := c.index[key]; exists {
+		v := node.value
 
-		c.buffer[c.head] = int16(i) // Set the most recent read index to i
-		c.head = (c.head + 1) % c.size
+		if node != c.head { // If the element isn't already first, pop it out and move it to first place
+			if node == c.tail {
+				c.tail = node.prev
+			}
+			node.pop()
 
-		if last := c.buffer[c.head]; last != -1 {
-			c.records[last].count-- // Decrement the least recent read
+			node.next = c.head
+			if c.head != nil {
+				c.head.prev = node
+			}
+			c.head = node
 		}
 
-		s := c.values[i]
-		return &s // Return pointer to a copy-- the original should not be modified
+		return &v // Return pointer to a copy-- the cache entry value should not be modified
 	}
 	return nil
 }
 
-func (c *ResourceCache[V]) Add(key Snowflake, value V) {
+func (c *LRUCache[K, V]) Add(key K, value V) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	var i byte
-	read := c.records[0]
-	for j, v := range c.records { // Find unassigned or least accessed/the oldest record
-		if v.total == 0 || v.count < read.count || (v.count == 0 && v.total < read.total) {
-			i = byte(j)
-			read = v
-		}
+	node := &cacheNode[K, V]{key: key, value: value}
+	c.index[key] = node
+	c.length++
+
+	if c.length == 1 { // First element added is the tail
+		c.tail = node
 	}
 
-	delete(c.id2index, c.index2id[i]) // Delete id -> index mapping of the value being replaced
-
-	for j, v := range c.buffer { // Delete increment history
-		if v == int16(i) {
-			c.buffer[j] = -1
-		}
+	node.next = c.head // Set head to new value and update the backwards pointer
+	if c.head != nil {
+		c.head.prev = node
 	}
+	c.head = node
 
-	c.values[i] = value
-	c.records[i] = readRecord{count: 1, total: 1}
-	c.index2id[i] = key
-	c.id2index[key] = i
+	if c.length > c.capacity { // Last node is discarded when over capacity
+		c.length--
+		delete(c.index, c.tail.key)
+		c.tail = c.tail.prev
+		c.tail.next = nil
+	}
 }
 
-// Invalidate marks a given resource as invalidated and deletes it's id -> index mapping, allowing it to be overwritten.
-func (c *ResourceCache[V]) Invalidate(key Snowflake) {
+// Invalidate discards the node belonging to key and patches the two adjacent nodes together
+func (c *LRUCache[K, V]) Invalidate(key K) {
 	c.mutex.Lock()
-	if i, exists := c.id2index[key]; exists {
-		delete(c.id2index, key)
-		c.index2id[i] = 0
+	defer c.mutex.Unlock()
+
+	if c.length == 0 {
+		return
 	}
-	c.mutex.Unlock()
+
+	if node, exists := c.index[key]; exists {
+		delete(c.index, node.key)
+		node.pop()
+		c.length--
+
+		if node == c.head { // Element can be both the head and tail simultaneously if length was 1
+			c.head = node.next
+		}
+		if node == c.tail {
+			c.tail = node.prev
+		}
+	}
 }
 
 // Update replaces the value mapped to key if it exists, otherwise nothing will happen.
-func (c *ResourceCache[V]) Update(key Snowflake, value V) {
+func (c *LRUCache[K, V]) Update(key K, value V) {
 	c.mutex.Lock()
-	if i, exists := c.id2index[key]; exists {
-		c.values[i] = value
+	defer c.mutex.Unlock()
+	if node, exists := c.index[key]; exists {
+		node.value = value
 	}
-	c.mutex.Unlock()
 }

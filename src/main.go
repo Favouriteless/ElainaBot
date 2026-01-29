@@ -35,7 +35,7 @@ func main() {
 	RegisterCommands()
 
 	deploy := flag.String("mode", "bot", "Update the running mode:\n- deploy_commands: Deploys application commands\n- deploy_db: Deploys/updates database schemas")
-	commands := flag.String("commands", "", "Update the commands to deploy when using the --mode=deploy_commands")
+	commands := flag.String("commands", "", "Update the commands to deploy/delete when using the --mode=deploy_commands")
 	flag.Parse()
 
 	switch *deploy {

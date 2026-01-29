@@ -18,7 +18,7 @@ const dbConnectAttempts = 5
 
 var dbConn *sql.DB
 
-var guildSettingsCache = discord.CreateCache[elaina.GuildSettings](5)
+var guildSettingsCache = discord.CreateCache[discord.Snowflake, elaina.GuildSettings](5)
 
 // Connect attempts to open a connection with Elaina's backend database. If a connection can't be established,
 // the state is assumed to be unrecoverable and panics.

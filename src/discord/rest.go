@@ -10,7 +10,7 @@ import (
 	"slices"
 )
 
-func getCacheable[T any](cache *ResourceCache[T], id Snowflake, urlParts ...string) (*T, error) {
+func getCacheable[K comparable, T any](cache *LRUCache[K, T], id K, urlParts ...string) (*T, error) {
 	if val := cache.Get(id); val != nil {
 		return val, nil
 	}

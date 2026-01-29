@@ -22,7 +22,7 @@ var Events = &EventDispatcher{
 }
 
 // Event represents a deserialization and handler dispatcher for a type of Event. Built-in handlers will
-// always run LAST, as they may modify a ResourceCache.
+// always run LAST, as they may modify a LRUCache.
 type Event[T any] struct {
 	Name     string
 	handlers []EventHandler[T]

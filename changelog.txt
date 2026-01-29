@@ -1,0 +1,1 @@
+- CHANGED: REST API caches now use a LRU strategy to minimize memory footprint
