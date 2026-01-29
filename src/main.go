@@ -42,8 +42,10 @@ func main() {
 	case "deploy_commands":
 		discord.DeployCommands(strings.Split(*commands, ",")...)
 	case "deploy_db":
-		database.Deploy(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
+
 	case "bot":
+		database.Deploy(secrets.dbUser, secrets.dbPassword, secrets.dbAddress) // Temporary measure to get the bot to auto update schemas
+
 		conn := database.Connect(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
 		defer conn.Close()
 
