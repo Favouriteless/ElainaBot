@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 )
 
@@ -35,14 +34,13 @@ func main() {
 	RegisterCommands()
 
 	deploy := flag.String("mode", "bot", "Update the running mode:\n- deploy_commands: Deploys application commands\n- deploy_db: Deploys/updates database schemas")
-	commands := flag.String("commands", "", "Update the commands to deploy/delete when using the --mode=deploy_commands")
 	flag.Parse()
 
 	switch *deploy {
 	case "deploy_commands":
-		discord.DeployCommands(strings.Split(*commands, ",")...)
+		discord.DeployCommands()
 	case "deploy_db":
-
+		database.Deploy(secrets.dbUser, secrets.dbPassword, secrets.dbAddress)
 	case "bot":
 		database.Deploy(secrets.dbUser, secrets.dbPassword, secrets.dbAddress) // Temporary measure to get the bot to auto update schemas
 

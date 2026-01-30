@@ -1,1 +1,3 @@
-- CHANGED: REST API caches now use a LRU strategy to minimize memory footprint
+- ADDED: Support for subcommands and subcommand groups
+
+- CHANGED: Macro commands have been migrated to subcommands for ease of use

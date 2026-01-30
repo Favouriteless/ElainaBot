@@ -14,14 +14,16 @@ func interactionCreateEvent(payload InteractionCreatePayload) error { // Built-i
 	var c ApplicationCommandData
 	if err := json.Unmarshal(*payload.Data, &c); err != nil {
 		slog.Error("[Command] Failed to parse application command data: " + err.Error())
+		_ = SendInteractionResponse(InteractionResponse{
+			Type: RespTypeChannelMessage,
+			Data: Message{Content: "Elaina couldn't parse this command, you should report this to the developers!: " + err.Error(), Flags: MsgFlagEphemeral},
+		}, payload.Id, payload.Token)
 		return nil
 	}
 
 	for _, command := range Commands {
 		if c.Name == command.Name {
-			slog.Info("[Command] Dispatching application command: " + c.Name)
-
-			if err := command.Handler(c, payload.GuildId, payload.Id, payload.Token); err != nil {
+			if err := command.Dispatch(payload.GuildId, payload.Id, payload.Token, c); err != nil {
 				slog.Error("[Command] Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
 				_ = SendInteractionResponse(InteractionResponse{
 					Type: RespTypeChannelMessage,

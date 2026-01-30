@@ -7,7 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
+	"time"
 )
 
 func getCacheable[K comparable, T any](cache *LRUCache[K, T], id K, urlParts ...string) (*T, error) {
@@ -44,32 +44,31 @@ func DeleteCommand(command Snowflake) (*http.Response, error) {
 	return resp, err
 }
 
-func DeployCommands(names ...string) {
+func DeployCommands() {
 	slog.Info("Deploying all application commands...")
 	for _, com := range Commands {
-		if slices.Contains(names, com.Name) {
-			func() {
-				resp, err := DeployCommand(com)
-				if err != nil {
-					slog.Error("Error registering command: ", slog.String("command", com.Name), slog.String("error", err.Error()))
-					return
-				}
-				defer resp.Body.Close()
+		func() {
+			resp, err := DeployCommand(com)
+			if err != nil {
+				slog.Error("Error registering command: ", slog.String("command", com.Name), slog.String("error", err.Error()))
+				return
+			}
+			defer resp.Body.Close()
 
-				switch resp.StatusCode {
-				case 200:
-					slog.Info("Command updated successfully: " + com.Name)
-				case 201:
-					slog.Info("Command added successfully: " + com.Name)
-				default:
-					body, err := io.ReadAll(resp.Body)
-					if err != nil {
-						panic(err) // Should never be hit
-					}
-					slog.Error("Command could not be created: ", slog.String("command", com.Name), slog.String("status_code", resp.Status), slog.String("body", string(body)))
+			switch resp.StatusCode {
+			case 200:
+				slog.Info("Command updated successfully: " + com.Name)
+			case 201:
+				slog.Info("Command added successfully: " + com.Name)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					panic(err) // Should never be hit
 				}
-			}()
-		}
+				slog.Error("Command could not be created: ", slog.String("command", com.Name), slog.String("status_code", resp.Status), slog.String("body", string(body)))
+			}
+		}()
+		time.Sleep(1 * time.Second) // This looks really stupid, but it's to avoid rate limiting
 	}
 }
 

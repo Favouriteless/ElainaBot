@@ -4,41 +4,48 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 )
 
-// Command context as specified by https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
+// CommandContext as specified by https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
+type CommandContext int
+
 const (
-	CmdContextGuild          = 0
-	CmdContextBotDm          = 1
-	CmdContextPrivateChannel = 2
+	CmdContextGuild CommandContext = iota
+	CmdContextBotDm
+	CmdContextPrivateChannel
 )
 
-// Command type as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types
+// CommandType as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types
+type CommandType int
+
 const (
-	CmdTypeChatInput         = 1
-	CmdTypeUserInput         = 2
-	CmdTypeMessage           = 3
-	CmdTypePrimaryEntryPoint = 4
+	CmdTypeChatInput CommandType = iota + 1
+	CmdTypeUser
+	CmdTypeMessage
+	CmdTypePrimaryEntryPoint
 )
 
-// Command option type as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
+// CommandOptionType as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
+type CommandOptionType int
+
 const (
-	CmdOptSubCommand      = 1
-	CmdOptSubCommandGroup = 2
-	CmdOptString          = 3
-	CmdOptInt             = 4
-	CmdOptBool            = 5
-	CmdOptUser            = 6
-	CmdOptChannel         = 7
-	CmdOptRole            = 8
-	CmdOptMentionable     = 9
-	CmdOptFloat64         = 10
-	CmdOptAttachment      = 11
+	CmdOptSubcommand CommandOptionType = iota + 1
+	CmdOptSubcommandGroup
+	CmdOptString
+	CmdOptInt
+	CmdOptBool
+	CmdOptUser
+	CmdOptChannel
+	CmdOptRole
+	CmdOptMentionable
+	CmdOptFloat64
+	CmdOptAttachment
 )
 
-var idToOptTypeName = map[int]string{
-	CmdOptSubCommand:      "Subcommand",
-	CmdOptSubCommandGroup: "Subcommand Group",
+var idToOptTypeName = map[CommandOptionType]string{
+	CmdOptSubcommand:      "Subcommand",
+	CmdOptSubcommandGroup: "Subcommand Group",
 	CmdOptString:          "String",
 	CmdOptInt:             "Integer",
 	CmdOptBool:            "Boolean",
@@ -52,39 +59,125 @@ var idToOptTypeName = map[int]string{
 
 var Commands = make([]*ApplicationCommand, 1)
 
-func AddCommand(command *ApplicationCommand) {
-	Commands = append(Commands, command)
-}
-
-type CommandHandler = func(data ApplicationCommandData, guildId Snowflake, id Snowflake, token string) error
+type CommandHandler = func(params CommandParams) error
 
 // ApplicationCommand represents https://discord.com/developers/docs/interactions/application-commands#application-command-object
 // as well as its responses https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
 type ApplicationCommand struct {
 	Name          string          `json:"name"`
-	Type          int             `json:"type"` // 1 = CHAT_INPUT, 2 = USER, 3 = MESSAGE, 4 = PRIMARY_ENTRY_POINT.
+	Type          CommandType     `json:"type"`
 	Id            Snowflake       `json:"id,omitempty"`
 	ApplicationId Snowflake       `json:"application_id,omitempty"`
 	GuildId       *Snowflake      `json:"guild_id,omitempty"`
 	Description   string          `json:"description,omitempty"` // 1-100 characters, leave empty if not CHAT_INPUT
 	Options       []CommandOption `json:"options,omitempty"`     // Optional, max 25 length. Do not access this directly, use the helpers instead
 
-	Permissions int64          `json:"default_member_permissions,string,omitempty"` // Nullable (bit set). Annoyingly, discord sends this as a string.
-	Nsfw        bool           `json:"nsfw,omitempty"`                              // Optional, default false
-	Contexts    []int          `json:"contexts,omitempty"`                          // 0 = GUILD, 1 = BOT_DM, 2 = PRIVATE_CHANNEL
-	Version     Snowflake      `json:"version,omitempty"`
-	Handler     CommandHandler `json:"-"` // If true, the command will be consumed by this handler and not passed to others
+	Permissions int64            `json:"default_member_permissions,string,omitempty"` // Nullable (bit set). Annoyingly, discord sends this as a string.
+	Nsfw        bool             `json:"nsfw,omitempty"`                              // Optional, default false
+	Contexts    []CommandContext `json:"contexts,omitempty"`
+	Version     Snowflake        `json:"version,omitempty"`
+	Handler     CommandHandler   `json:"-"` // If true, the command will be consumed by this handler and not passed to others
+}
+
+// Dispatch attempts to execute the command given an input ApplicationCommandData from discord. This will only be called if the names match.
+func (c *ApplicationCommand) Dispatch(guild Snowflake, interactionId Snowflake, interactionToken string, data ApplicationCommandData) error {
+	params := CommandParams{
+		GuildId:          guild,
+		InteractionId:    interactionId,
+		InteractionToken: interactionToken,
+		Options:          nil,
+		Resolved:         data.ResolvedData,
+	}
+
+	if c.Handler != nil {
+		slog.Info("[Command] Dispatching application command: " + c.Name)
+
+		params.Options = &data.Options
+		if err := c.Handler(params); err != nil {
+			return err
+		}
+		return nil
+	}
+	// If handler is nil, assume subcommands or subcommand groups are present
+	var subcommand *CommandOption
+	var err error
+
+	for _, option := range data.Options { // Linear search for the subcommand in question
+		if option.Type == CmdOptSubcommand {
+			if subcommand, err = c.GetSubcommand(option.Name); err != nil {
+				return err
+			}
+			params.Options = &option.Options
+			break
+		} else if option.Type == CmdOptSubcommandGroup {
+			group, err := c.GetSubcommandGroup(option.Name)
+			if err != nil {
+				return err
+			} else if group == nil {
+				return fmt.Errorf("subcommand group %s does not exist", option.Name)
+			}
+
+			for _, suboption := range option.Options {
+				if subcommand, err = group.GetSubcommand(suboption.Name); err != nil {
+					return err
+				}
+				params.Options = &suboption.Options
+			}
+
+			break
+		}
+	}
+
+	if subcommand == nil {
+		return errors.New("subcommand does not exist")
+	} else if subcommand.Handler == nil {
+		return fmt.Errorf("subcommand %s does not have a handler", subcommand.Name)
+	}
+
+	return subcommand.Handler(params)
+}
+
+// GetSubcommand returns the CommandOption matching name or throws an error if CommandOption.Type != CmdOptSubcommand
+func (c *ApplicationCommand) GetSubcommand(name string) (*CommandOption, error) {
+	return findOption(name, CmdOptSubcommand, c.Options)
+}
+
+// GetSubcommandGroup returns the CommandOption matching name or throws an error if CommandOption.Type != CmdOptSubcommandGroup
+func (c *ApplicationCommand) GetSubcommandGroup(name string) (*CommandOption, error) {
+	return findOption(name, CmdOptSubcommandGroup, c.Options)
 }
 
 // CommandOption represents https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-structure
 // These are exposed by methods on OptionType and should not be created directly as generics can't express them properly
 type CommandOption struct {
-	Type        int                   `json:"type"` // https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
+	Type        CommandOptionType     `json:"type"` // https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
 	Name        string                `json:"name"` // 1-32 characters
 	Description string                `json:"description"`
-	Required    bool                  `json:"required"`          // Optional, default false
-	Choices     []CommandOptionChoice `json:"choices,omitempty"` // Optional, 25 max
-	// Options     []commandOption           `json:"options,omitempty"` // TODO: Add support for subcommands
+	Required    bool                  `json:"required,omitempty"`   // Optional, default false
+	Choices     []CommandOptionChoice `json:"choices,omitempty"`    // Optional, 25 max
+	MinValue    float64               `json:"min_value,omitempty"`  // MUST match with the correct CommandOptionType
+	MaxValue    float64               `json:"max_value,omitempty"`  // MUST match with the correct CommandOptionType
+	MinLength   int                   `json:"min_length,omitempty"` // Only applicable for CmdOptString
+	MaxLength   int                   `json:"max_length,omitempty"` // Only applicable for CmdOptString
+	Options     []CommandOption       `json:"options,omitempty"`    // Only applicable for CmdOptSubcommand and CmdOptSubcommandGroup
+	Handler     CommandHandler        `json:"-"`                    // Only applicable for CmdOptSubcommand
+}
+
+// GetSubcommand returns the CommandOption matching name or throws an error if CommandOption.Type != CmdOptSubcommand
+func (c *CommandOption) GetSubcommand(name string) (*CommandOption, error) {
+	return findOption(name, CmdOptSubcommand, c.Options)
+}
+
+func findOption(name string, optType CommandOptionType, options []CommandOption) (*CommandOption, error) {
+	for _, opt := range options {
+		if opt.Name == name {
+			if opt.Type != optType {
+				return nil, fmt.Errorf("expected command option of type %s but got %s", idToOptTypeName[optType], idToOptTypeName[opt.Type])
+			}
+			return &opt, nil
+		}
+	}
+	return nil, nil
 }
 
 // CommandOptionChoice represents https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-choice-structure
@@ -93,22 +186,18 @@ type CommandOptionChoice struct {
 	Value interface{} `json:"value"` // This may be various types, matching the parent CommandOption.
 }
 
-// ApplicationCommandData represents an application command response sent by discord
-// https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
-type ApplicationCommandData struct {
-	Name         string              `json:"name"`
-	Type         int                 `json:"type"` // 1 = CHAT_INPUT, 2 = USER, 3 = MESSAGE, 4 = PRIMARY_ENTRY_POINT.
-	Id           Snowflake           `json:"id"`
-	Options      []CommandOptionData `json:"options"`
-	TargetId     *Snowflake          `json:"target_id"` // Only used for user & message commands
-	GuildId      *Snowflake          `json:"guild_id"`
-	ResolvedData *ResolvedData       `json:"resolved"`
+type CommandParams struct {
+	GuildId          Snowflake
+	InteractionId    Snowflake
+	InteractionToken string
+	Options          *[]CommandOptionData
+	Resolved         *ResolvedData
 }
 
-// OptionByName iterates over all child options and returns the first one with a matching name. If no option is found,
+// GetOption iterates over all child options and returns the first one with a matching name. If no option is found,
 // returns nil.
-func (d ApplicationCommandData) OptionByName(name string) *CommandOptionData {
-	for _, option := range d.Options {
+func (p CommandParams) GetOption(name string) *CommandOptionData {
+	for _, option := range *p.Options {
 		if option.Name == name {
 			return &option
 		}
@@ -116,45 +205,64 @@ func (d ApplicationCommandData) OptionByName(name string) *CommandOptionData {
 	return nil
 }
 
+// ApplicationCommandData represents an application command response sent by discord
+// https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
+type ApplicationCommandData struct {
+	Name         string              `json:"name"`
+	Type         CommandType         `json:"type"`
+	Id           Snowflake           `json:"id"`
+	Options      []CommandOptionData `json:"options"`
+	TargetId     *Snowflake          `json:"target_id"` // Only used for user & message commands
+	GuildId      *Snowflake          `json:"guild_id"`
+	ResolvedData *ResolvedData       `json:"resolved"`
+}
+
 // CommandOptionData represents https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-interaction-data-option-structure
 type CommandOptionData struct {
-	Name  string      `json:"name"`
-	Type  int         `json:"type"`
-	Value interface{} `json:"-"` // Gets decoded according to type.. do not read directly
-	// Options []CommandOption `json:"options"` // TODO: Add support for groups & subcommands
+	Name    string              `json:"name"`
+	Type    CommandOptionType   `json:"type"`
+	Options []CommandOptionData `json:"options"`
+	Value   interface{}         `json:"-"` // Value gets decoded according to Type. do not read directly
 }
 
 func (o *CommandOptionData) UnmarshalJSON(data []byte) error {
-	var p struct {
-		Name  string `json:"name"`
-		Type  int    `json:"type"`
-		Value json.RawMessage
+	var p struct { // Sadly can't compose this, or it'll recursively unmarshal itself
+		Name     string              `json:"name"`
+		Type     CommandOptionType   `json:"type"`
+		Options  []CommandOptionData `json:"options"`
+		RawValue json.RawMessage     `json:"value"`
 	}
 	if err := json.Unmarshal(data, &p); err != nil {
 		return err
 	}
+
 	o.Name = p.Name
 	o.Type = p.Type
+	o.Options = p.Options
 
-	if p.Type == 4 { // Int needs special handling because unmarshal defaults to a float64 & the interface cast would break
+	if p.RawValue == nil {
+		return nil
+	}
+
+	if o.Type == 4 { // Int needs special handling because unmarshal defaults to a float64 & the interface cast would break
 		var i int
-		if err := json.Unmarshal(p.Value, &i); err != nil {
+		if err := json.Unmarshal(p.RawValue, &i); err != nil {
 			return err
 		}
 		o.Value = i
-	} else if p.Type == 11 {
+	} else if o.Type == 11 {
 		var a Attachment
-		if err := json.Unmarshal(p.Value, &a); err != nil {
+		if err := json.Unmarshal(p.RawValue, &a); err != nil {
 			return err
 		}
 		o.Value = a
-	} else if p.Type == 6 || p.Type == 7 || p.Type == 8 || p.Type == 9 {
+	} else if o.Type == 6 || o.Type == 7 || o.Type == 8 || o.Type == 9 {
 		var s Snowflake
-		if err := json.Unmarshal(p.Value, &s); err != nil {
+		if err := json.Unmarshal(p.RawValue, &s); err != nil {
 			return err
 		}
 		o.Value = s
-	} else if err := json.Unmarshal(p.Value, &o.Value); err != nil {
+	} else if err := json.Unmarshal(p.RawValue, &o.Value); err != nil {
 		return err // Default unmarshal behaviour: Bool -> bool, Num -> float64, String -> string (Snowflake), Null -> nil
 	}
 
@@ -191,7 +299,7 @@ func (o *CommandOptionData) AsAttachment() *Attachment {
 	return o.Value.(*Attachment)
 }
 
-func (o *CommandOptionData) assertType(expected int) {
+func (o *CommandOptionData) assertType(expected CommandOptionType) {
 	if o.Type != expected {
 		panic(fmt.Errorf("expected option of type %s but got %s", idToOptTypeName[expected], idToOptTypeName[o.Type]))
 	}
