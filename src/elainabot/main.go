@@ -102,7 +102,7 @@ func loadSecrets() {
 		// Production secrets managed via docker compose secrets
 		CommonSecrets.Id = "1161747004712554656" // Elaina's client ID
 		CommonSecrets.Secret = dockerSecret("elaina-secret")
-		CommonSecrets.Secret = os.Getenv("DEVAINA_CLIENT_SECRET")
+		CommonSecrets.BotToken = dockerSecret("elaina-token")
 
 		botSecrets.dbUser = dockerSecret("elaina-db-username")
 		botSecrets.dbPassword = dockerSecret("elaina-db-password")
