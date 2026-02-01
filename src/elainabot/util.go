@@ -104,9 +104,10 @@ func unbanUser(guild Snowflake, user Snowflake) error {
 
 func timeoutUser(guild Snowflake, user User, duration time.Duration, reason string) error {
 	expires := time.Now().Add(duration)
-	timeoutMsg := fmt.Sprintf("You have been timed out until <t:%d>.\nReason: %s", expires.Unix(), reason)
 
 	go func() {
+		timeoutMsg := fmt.Sprintf("You have been timed out until <t:%d>.\nReason: %s", expires.Unix(), reason)
+
 		if dm, err := user.CreateDM(); err != nil {
 			slog.Error("[Elaina] Failed to notify user of timeout:", slog.String("user", user.Username), slog.String("error", err.Error()))
 		} else if _, err = dm.CreateMessage(timeoutMsg, false); err != nil {

@@ -75,8 +75,8 @@ func ApiUrl(parts ...string) string {
 	return out
 }
 
-// queries takes an even-sized array of key-value pairs k,v,k,v, escapes the values and returns them as the query segment of a url
-func queries(parts ...string) string {
+// QueryParams takes an even-sized array of key-value pairs k,v,k,v, escapes the values and returns them as the query segment of a url
+func QueryParams(parts ...string) string {
 	if len(parts)%2 != 0 {
 		panic(errors.New("mismatch in query param key-value pairs: " + strings.Join(parts, ",")))
 	}

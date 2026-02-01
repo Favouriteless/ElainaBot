@@ -100,13 +100,6 @@ var timeoutCommand = ApplicationCommand{
 			Required:    false,
 			MinLength:   1,
 		},
-		{
-			Name:        "delete_messages",
-			Description: "All of the user's messages within the last X seconds will be deleted.",
-			Type:        CmdOptInt,
-			Required:    false,
-			MinValue:    0,
-		},
 	},
 }
 

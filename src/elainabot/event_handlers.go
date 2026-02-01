@@ -2,8 +2,10 @@ package main
 
 import (
 	. "elaina-common"
+	"errors"
 	"log/slog"
 	"regexp"
+	"time"
 )
 
 var elainaRegex = regexp.MustCompile("(?i)common")
@@ -64,8 +66,15 @@ func banHoneypotEvent(payload CreateMessagePayload) error {
 		return err
 	}
 
-	if err = banUser(payload.GuildId, payload.Author, "You typed in the honeypot channel", 900); err != nil {
-		return err
+	if err := ModifyGuildMember(payload.GuildId, payload.Author.Id, ModifyGuildMemberPayload{CommunicationDisabledUntil: &Nullable[time.Time]{Value: time.Now().Add(time.Minute * 15)}}); err != nil {
+		return errors.New("failed to timeout guild member: " + err.Error())
 	}
+	if err := banUser(payload.GuildId, payload.Author, "You typed in the honeypot channel. You can rejoin immediately, but you are timed out for 15 minutes.", 900); err != nil {
+		return errors.New("failed to ban user: " + err.Error())
+	}
+	if err := DeleteBan(payload.GuildId, payload.Author.Id); err != nil {
+		return errors.New("failed to unban ban: " + err.Error())
+	}
+
 	return nil
 }

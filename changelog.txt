@@ -3,3 +3,4 @@
 
 - CHANGED: Macro commands have been migrated to subcommands for ease of use
 - CHANGED: Ban command is now permanent, no duration. A temporary removal can be done using timeout
+- CHANGED: Honeypot now times out & bans then unbans users, to purge their messages.

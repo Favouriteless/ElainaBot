@@ -28,7 +28,7 @@ func main() {
 	registerEvents()
 	registerCommands()
 
-	deploy := flag.String("mode", "bot", "Update the running mode:\n- deploy_commands: Deploys application toDeploy\n- deploy_db: Deploys/updates database schemas")
+	deploy := flag.String("mode", "", "Update the running mode:\n- deploy_commands: Deploys application toDeploy\n- deploy_db: Deploys/updates database schemas")
 	commands := flag.String("commands", "", "A comma separated list of commands to deploy")
 	flag.Parse()
 

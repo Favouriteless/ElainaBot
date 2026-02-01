@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 var RoleCache = CreateCache[Snowflake, Role](10)
@@ -76,6 +77,19 @@ func CreateMessage(channel Snowflake, content string, tts bool) (*Message, error
 
 func (channel Channel) CreateMessage(content string, tts bool) (*Message, error) {
 	return CreateMessage(channel.Id, content, tts)
+}
+
+func DeleteMessage(channel Snowflake, message Snowflake) error {
+	resp, err := Delete(ApiUrl("channels", channel.String(), "messages", message.String()))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 204 {
+		return fmt.Errorf("message was not deleted: %s", resp.Status)
+	}
+	return nil
 }
 
 func CreateDM(recipient Snowflake) (*Channel, error) {
@@ -221,12 +235,39 @@ func (guild Guild) KickUser(userId Snowflake) error {
 	return KickUser(guild.Id, userId)
 }
 
-func GetUserMessages(guildId Snowflake, author Snowflake) ([]Message, error) {
-	resp, err := Get(ApiUrl("guilds", guildId.String(), "messages", "search"))
+func GetUserMessages(guildId Snowflake, author Snowflake, start time.Time, end time.Time) ([]Message, error) {
+	startSnowflake := TimeToSnowflake(start)
+	endSnowflake := TimeToSnowflake(end) + 4194303
+
+	url := ApiUrl("guilds", guildId.String(), "messages", "search")
+	url += QueryParams(
+		"author_id", author.String(),
+		"include_nsfw", "true",
+		"min_id", startSnowflake.String(),
+		"max_id", endSnowflake.String())
+
+	resp, err := Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	return nil, nil
+	response := struct {
+		AnalyticsId      string      `json:"analytics_id"`
+		Messages         [][]Message `json:"messages"`
+		TotalResults     int
+		DocumentsIndexed int `json:"documents_indexed"`
+	}{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+
+	messages := make([]Message, response.TotalResults)
+	for _, m := range response.Messages {
+		for _, message := range m {
+			messages = append(messages, message)
+		}
+	}
+
+	return messages, nil
 }
