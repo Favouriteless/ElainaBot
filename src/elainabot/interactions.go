@@ -1,7 +1,8 @@
-package discord
+package main
 
 import (
 	"bytes"
+	. "elaina-common"
 	"encoding/json"
 )
 
@@ -19,7 +20,7 @@ func SendInteractionResponse(response InteractionResponse, id Snowflake, token s
 	if err != nil {
 		return err
 	}
-	resp, err := Post(Url("interactions", id.String(), token, "callback"), bytes.NewReader(encResponse))
+	resp, err := Post(ApiUrl("interactions", id.String(), token, "callback"), bytes.NewReader(encResponse))
 	if err != nil {
 		return err
 	}
@@ -39,7 +40,7 @@ func EditInteractionResponse(content string, token string) error {
 		return err
 	}
 
-	resp, err := Patch(Url("webhooks", application.id, token, "messages", "@original"), body)
+	resp, err := Patch(ApiUrl("webhooks", CommonSecrets.Id, token, "messages", "@original"), body)
 	if err != nil {
 		return err
 	}

@@ -1,14 +1,8 @@
-package discord
+package common
 
 import (
 	"sync"
 )
-
-var RoleCache = CreateCache[Snowflake, Role](10)
-var MessageCache = CreateCache[Snowflake, Message](50)
-var ChannelCache = CreateCache[Snowflake, Channel](20)
-var GuildCache = CreateCache[Snowflake, Guild](3)
-var GuildMemberCache = CreateCache[Snowflake, GuildMember](10)
 
 // LRUCache stores the last N objects passed to it in a fixed-size slice. Both read and write run in O(1),
 // implemented as a doubly linked list with a hash table for fast lookups.

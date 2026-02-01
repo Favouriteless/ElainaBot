@@ -1,12 +1,10 @@
-module ElainaBot
+module elaina-common
 
-go 1.25
+go 1.25.1
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/gorilla/websocket v1.5.3
 	github.com/stretchr/testify v1.11.1
-	github.com/zmwangx/emojiregexp v1.0.0
 )
 
 require (

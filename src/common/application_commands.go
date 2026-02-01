@@ -1,46 +1,9 @@
-package discord
+package common
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-)
-
-// CommandContext as specified by https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
-type CommandContext int
-
-const (
-	CmdContextGuild CommandContext = iota
-	CmdContextBotDm
-	CmdContextPrivateChannel
-)
-
-// CommandType as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types
-type CommandType int
-
-const (
-	CmdTypeChatInput CommandType = iota + 1
-	CmdTypeUser
-	CmdTypeMessage
-	CmdTypePrimaryEntryPoint
-)
-
-// CommandOptionType as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
-type CommandOptionType int
-
-const (
-	CmdOptSubcommand CommandOptionType = iota + 1
-	CmdOptSubcommandGroup
-	CmdOptString
-	CmdOptInt
-	CmdOptBool
-	CmdOptUser
-	CmdOptChannel
-	CmdOptRole
-	CmdOptMentionable
-	CmdOptFloat64
-	CmdOptAttachment
 )
 
 var idToOptTypeName = map[CommandOptionType]string{
@@ -57,9 +20,26 @@ var idToOptTypeName = map[CommandOptionType]string{
 	CmdOptAttachment:      "Attachment",
 }
 
-var Commands = make([]*ApplicationCommand, 1)
-
 type CommandHandler = func(params CommandParams) error
+
+type CommandParams struct {
+	GuildId          Snowflake
+	InteractionId    Snowflake
+	InteractionToken string
+	Options          *[]CommandOptionData
+	Resolved         *ResolvedData
+}
+
+// GetOption iterates over all child options and returns the first one with a matching name. If no option is found,
+// returns nil.
+func (p CommandParams) GetOption(name string) *CommandOptionData {
+	for _, option := range *p.Options {
+		if option.Name == name {
+			return &option
+		}
+	}
+	return nil
+}
 
 // ApplicationCommand represents https://discord.com/developers/docs/interactions/application-commands#application-command-object
 // as well as its responses https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
@@ -77,64 +57,6 @@ type ApplicationCommand struct {
 	Contexts    []CommandContext `json:"contexts,omitempty"`
 	Version     Snowflake        `json:"version,omitempty"`
 	Handler     CommandHandler   `json:"-"` // If true, the command will be consumed by this handler and not passed to others
-}
-
-// Dispatch attempts to execute the command given an input ApplicationCommandData from discord. This will only be called if the names match.
-func (c *ApplicationCommand) Dispatch(guild Snowflake, interactionId Snowflake, interactionToken string, data ApplicationCommandData) error {
-	params := CommandParams{
-		GuildId:          guild,
-		InteractionId:    interactionId,
-		InteractionToken: interactionToken,
-		Options:          nil,
-		Resolved:         data.ResolvedData,
-	}
-
-	if c.Handler != nil {
-		slog.Info("[Command] Dispatching application command: " + c.Name)
-
-		params.Options = &data.Options
-		if err := c.Handler(params); err != nil {
-			return err
-		}
-		return nil
-	}
-	// If handler is nil, assume subcommands or subcommand groups are present
-	var subcommand *CommandOption
-	var err error
-
-	for _, option := range data.Options { // Linear search for the subcommand in question
-		if option.Type == CmdOptSubcommand {
-			if subcommand, err = c.GetSubcommand(option.Name); err != nil {
-				return err
-			}
-			params.Options = &option.Options
-			break
-		} else if option.Type == CmdOptSubcommandGroup {
-			group, err := c.GetSubcommandGroup(option.Name)
-			if err != nil {
-				return err
-			} else if group == nil {
-				return fmt.Errorf("subcommand group %s does not exist", option.Name)
-			}
-
-			for _, suboption := range option.Options {
-				if subcommand, err = group.GetSubcommand(suboption.Name); err != nil {
-					return err
-				}
-				params.Options = &suboption.Options
-			}
-
-			break
-		}
-	}
-
-	if subcommand == nil {
-		return errors.New("subcommand does not exist")
-	} else if subcommand.Handler == nil {
-		return fmt.Errorf("subcommand %s does not have a handler", subcommand.Name)
-	}
-
-	return subcommand.Handler(params)
 }
 
 // GetSubcommand returns the CommandOption matching name or throws an error if CommandOption.Type != CmdOptSubcommand
@@ -186,26 +108,7 @@ type CommandOptionChoice struct {
 	Value interface{} `json:"value"` // This may be various types, matching the parent CommandOption.
 }
 
-type CommandParams struct {
-	GuildId          Snowflake
-	InteractionId    Snowflake
-	InteractionToken string
-	Options          *[]CommandOptionData
-	Resolved         *ResolvedData
-}
-
-// GetOption iterates over all child options and returns the first one with a matching name. If no option is found,
-// returns nil.
-func (p CommandParams) GetOption(name string) *CommandOptionData {
-	for _, option := range *p.Options {
-		if option.Name == name {
-			return &option
-		}
-	}
-	return nil
-}
-
-// ApplicationCommandData represents an application command response sent by discord
+// ApplicationCommandData represents an CommonSecrets command response sent by discord
 // https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-application-command-data-structure
 type ApplicationCommandData struct {
 	Name         string              `json:"name"`
@@ -245,7 +148,7 @@ func (o *CommandOptionData) UnmarshalJSON(data []byte) error {
 	}
 
 	if o.Type == 4 { // Int needs special handling because unmarshal defaults to a float64 & the interface cast would break
-		var i int
+		var i int64 // Always deserialize as int64 and downsize it later via a cast
 		if err := json.Unmarshal(p.RawValue, &i); err != nil {
 			return err
 		}
@@ -275,8 +178,12 @@ func (o *CommandOptionData) AsString() string {
 }
 
 func (o *CommandOptionData) AsInt() int {
+	return int(o.AsInt64())
+}
+
+func (o *CommandOptionData) AsInt64() int64 {
 	o.assertType(CmdOptInt)
-	return o.Value.(int)
+	return o.Value.(int64)
 }
 
 func (o *CommandOptionData) AsBool() bool {
@@ -287,6 +194,10 @@ func (o *CommandOptionData) AsBool() bool {
 func (o *CommandOptionData) AsSnowflake() Snowflake {
 	o.assertSnowflake()
 	return o.Value.(Snowflake)
+}
+
+func (o *CommandOptionData) AsFloat32() float32 {
+	return float32(o.AsFloat64())
 }
 
 func (o *CommandOptionData) AsFloat64() float64 {

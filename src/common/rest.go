@@ -1,21 +1,25 @@
-package discord
+package common
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
-	"time"
 )
+
+var RoleCache = CreateCache[Snowflake, Role](10)
+var MessageCache = CreateCache[Snowflake, Message](50)
+var ChannelCache = CreateCache[Snowflake, Channel](20)
+var GuildCache = CreateCache[Snowflake, Guild](3)
+var GuildMemberCache = CreateCache[Snowflake, GuildMember](10)
 
 func getCacheable[K comparable, T any](cache *LRUCache[K, T], id K, urlParts ...string) (*T, error) {
 	if val := cache.Get(id); val != nil {
 		return val, nil
 	}
 
-	resp, err := Get(Url(urlParts...))
+	resp, err := Get(ApiUrl(urlParts...))
 	if err != nil {
 		return nil, err
 	}
@@ -29,47 +33,19 @@ func getCacheable[K comparable, T any](cache *LRUCache[K, T], id K, urlParts ...
 	return &val, nil
 }
 
-func DeployCommand(command *ApplicationCommand) (*http.Response, error) {
+func CreateOrUpdateCommand(command *ApplicationCommand) (*http.Response, error) {
 	enc, err := json.Marshal(command)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := Post(Url("applications", application.id, "commands"), bytes.NewReader(enc))
+	resp, err := Post(ApiUrl("applications", CommonSecrets.Id, "commands"), bytes.NewReader(enc))
 	return resp, err
 }
 
 func DeleteCommand(command Snowflake) (*http.Response, error) {
-	resp, err := Delete(Url("applications", application.id, "commands", command.String()))
+	resp, err := Delete(ApiUrl("applications", CommonSecrets.Id, "commands", command.String()))
 	return resp, err
-}
-
-func DeployCommands() {
-	slog.Info("Deploying all application commands...")
-	for _, com := range Commands {
-		func() {
-			resp, err := DeployCommand(com)
-			if err != nil {
-				slog.Error("Error registering command: ", slog.String("command", com.Name), slog.String("error", err.Error()))
-				return
-			}
-			defer resp.Body.Close()
-
-			switch resp.StatusCode {
-			case 200:
-				slog.Info("Command updated successfully: " + com.Name)
-			case 201:
-				slog.Info("Command added successfully: " + com.Name)
-			default:
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					panic(err) // Should never be hit
-				}
-				slog.Error("Command could not be created: ", slog.String("command", com.Name), slog.String("status_code", resp.Status), slog.String("body", string(body)))
-			}
-		}()
-		time.Sleep(1 * time.Second) // This looks really stupid, but it's to avoid rate limiting
-	}
 }
 
 func CreateMessage(channel Snowflake, content string, tts bool) (*Message, error) {
@@ -81,7 +57,7 @@ func CreateMessage(channel Snowflake, content string, tts bool) (*Message, error
 		return nil, err
 	}
 
-	resp, err := Post(Url("channels", channel.String(), "messages"), bytes.NewReader(body))
+	resp, err := Post(ApiUrl("channels", channel.String(), "messages"), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -110,14 +86,18 @@ func CreateDM(recipient Snowflake) (*Channel, error) {
 		return nil, err
 	}
 
-	resp, err := Post(Url("users", "@me", "channels"), bytes.NewReader(body))
+	resp, err := Post(ApiUrl("users", "@me", "channels"), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("dm was not created: %s", resp.Status)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("dm was not created: %s: %s", resp.Status, string(body))
 	}
 
 	var channel Channel
@@ -158,7 +138,7 @@ func GetGuild(id Snowflake) (*Guild, error) {
 // CreateReaction creates a reaction to a message using the bot account. emoji must be either a Unicode emoji for
 // built-in emojis or a string in the format "name:snowflake" for custom discord emojis.
 func CreateReaction(channelId Snowflake, messageId Snowflake, emoji string) error {
-	resp, err := Put(Url("channels", channelId.String(), "messages", messageId.String(), "reactions", emoji, "@me"), nil)
+	resp, err := Put(ApiUrl("channels", channelId.String(), "messages", messageId.String(), "reactions", emoji, "@me"), nil)
 	if err != nil {
 		return err
 	}
@@ -190,7 +170,7 @@ func CreateBan(guildId Snowflake, userId Snowflake, deleteSeconds int) error {
 		return err
 	}
 
-	resp, err := Put(Url("guilds", guildId.String(), "bans", userId.String()), enc)
+	resp, err := Put(ApiUrl("guilds", guildId.String(), "bans", userId.String()), enc)
 	if err != nil {
 		return err
 	}
@@ -207,7 +187,7 @@ func (user User) CreateBan(guildId Snowflake, deleteSeconds int) error {
 }
 
 func DeleteBan(guildId Snowflake, userId Snowflake) error {
-	resp, err := Delete(Url("guilds", guildId.String(), "bans", userId.String()))
+	resp, err := Delete(ApiUrl("guilds", guildId.String(), "bans", userId.String()))
 	if err != nil {
 		return err
 	}
@@ -216,7 +196,20 @@ func DeleteBan(guildId Snowflake, userId Snowflake) error {
 }
 
 func KickUser(guildId Snowflake, userId Snowflake) error {
-	resp, err := Delete(Url("guilds", guildId.String(), "members", userId.String()))
+	resp, err := Delete(ApiUrl("guilds", guildId.String(), "members", userId.String()))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func ModifyGuildMember(guildId Snowflake, userId Snowflake, payload ModifyGuildMemberPayload) error {
+	enc, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	resp, err := Patch(ApiUrl("guilds", guildId.String(), "members", userId.String()), enc)
 	if err != nil {
 		return err
 	}
@@ -226,4 +219,14 @@ func KickUser(guildId Snowflake, userId Snowflake) error {
 
 func (guild Guild) KickUser(userId Snowflake) error {
 	return KickUser(guild.Id, userId)
+}
+
+func GetUserMessages(guildId Snowflake, author Snowflake) ([]Message, error) {
+	resp, err := Get(ApiUrl("guilds", guildId.String(), "messages", "search"))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return nil, nil
 }

@@ -1,11 +1,12 @@
-package discord
+package common
 
 import (
 	"bytes"
 	"errors"
 	"io"
 	"net/http"
-	url2 "net/url"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -28,7 +29,7 @@ func SendHttp(method string, url string, body io.Reader, headers ...string) (*ht
 	}
 
 	req.Header.Set("User-Agent", "DiscordBot (https://github.com/Favouriteless/ElainaBot, 2.0.0)")
-	req.Header.Set("Authorization", "Bot "+application.token)
+	req.Header.Set("Authorization", "Bot "+CommonSecrets.BotToken)
 
 	for range defaultHttpAttempts {
 		var resp *http.Response
@@ -65,13 +66,27 @@ func Put(url string, body []byte) (*http.Response, error) {
 	return SendHttp(http.MethodPut, url, bytes.NewBuffer(body), "Content-Type", "application/json")
 }
 
-func Url(parts ...string) string {
+func ApiUrl(parts ...string) string {
 	for i, v := range parts {
-		parts[i] = url2.PathEscape(v)
+		parts[i] = url.PathEscape(v)
 	}
-	url, err := url2.JoinPath(apiUrl, parts...)
-	if err != nil {
-		panic(err) // Should never be hit
+	out, err := url.JoinPath(BaseApiUrl, parts...)
+	AssertIsNil(err)
+	return out
+}
+
+// queries takes an even-sized array of key-value pairs k,v,k,v, escapes the values and returns them as the query segment of a url
+func queries(parts ...string) string {
+	if len(parts)%2 != 0 {
+		panic(errors.New("mismatch in query param key-value pairs: " + strings.Join(parts, ",")))
 	}
-	return url
+	out := "?"
+	for i := 0; i < len(parts); i += 2 {
+		out += parts[i] + "=" + url.QueryEscape(parts[i+1]) + "&"
+	}
+	return out[:len(out)-1] // Last character is a trailing &
+}
+
+func queryParam(key string, value string) string {
+	return key + "=" + url.QueryEscape(value)
 }

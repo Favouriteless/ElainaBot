@@ -1,20 +1,18 @@
 package main
 
 import (
-	"ElainaBot/config"
-	"ElainaBot/database"
-	"ElainaBot/discord"
+	. "elaina-common"
 	"log/slog"
 	"regexp"
 )
 
-var elainaRegex = regexp.MustCompile("(?i)elaina")
+var elainaRegex = regexp.MustCompile("(?i)common")
 
-func RegisterEvents() {
-	discord.Events.CreateMessage.Register(logMessagesEvent, respondToNameEvent, banHoneypotEvent)
+func registerEvents() {
+	Events.CreateMessage.Register(logMessagesEvent, respondToNameEvent, banHoneypotEvent)
 }
 
-func logMessagesEvent(payload discord.CreateMessagePayload) error {
+func logMessagesEvent(payload CreateMessagePayload) error {
 	if payload.Author.Bot {
 		return nil
 	}
@@ -22,13 +20,13 @@ func logMessagesEvent(payload discord.CreateMessagePayload) error {
 	return nil
 }
 
-func respondToNameEvent(payload discord.CreateMessagePayload) error {
+func respondToNameEvent(payload CreateMessagePayload) error {
 	if payload.Author.Bot {
 		return nil
 	}
 
 	if elainaRegex.MatchString(payload.Content) {
-		if err := payload.CreateReaction(config.GetString(config.HelloEmoji)); err != nil {
+		if err := payload.CreateReaction(getConfig(HelloEmoji)); err != nil {
 			slog.Error("[Elaina] Could not say hello to " + payload.Author.Username + ": " + err.Error())
 		} else {
 			slog.Info("[Elaina] Saying hello to " + payload.Author.Username)
@@ -37,12 +35,12 @@ func respondToNameEvent(payload discord.CreateMessagePayload) error {
 	return nil
 }
 
-func banHoneypotEvent(payload discord.CreateMessagePayload) error {
+func banHoneypotEvent(payload CreateMessagePayload) error {
 	if payload.Author.Bot || payload.GuildId == 0 {
 		return nil
 	}
 
-	settings, err := database.GetGuildSettings(payload.GuildId)
+	settings, err := GetGuildSettings(payload.GuildId)
 	if err != nil {
 		return err
 	}
@@ -51,22 +49,22 @@ func banHoneypotEvent(payload discord.CreateMessagePayload) error {
 		return nil
 	}
 
-	guild, err := discord.GetGuild(payload.GuildId)
+	guild, err := GetGuild(payload.GuildId)
 	if err != nil {
 		return err
 	}
 
-	channel, err := discord.GetChannel(payload.ChannelId)
+	channel, err := GetChannel(payload.ChannelId)
 	if err != nil {
 		return err
 	}
 
 	perms, err := getMemberPermsInChannel(*guild, *payload.Member, payload.Author.Id, *channel)
-	if err != nil || perms&discord.PermAdministrator > 0 || perms&discord.PermModerateMembers > 0 {
+	if err != nil || perms&PermAdministrator > 0 || perms&PermModerateMembers > 0 {
 		return err
 	}
 
-	if err = banUser(payload.GuildId, payload.Author, 900, "You typed in the honeypot channel", true); err != nil {
+	if err = banUser(payload.GuildId, payload.Author, "You typed in the honeypot channel", 900); err != nil {
 		return err
 	}
 	return nil

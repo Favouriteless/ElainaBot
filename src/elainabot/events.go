@@ -1,6 +1,7 @@
-package discord
+package main
 
 import (
+	. "elaina-common"
 	"encoding/json"
 	"log/slog"
 )

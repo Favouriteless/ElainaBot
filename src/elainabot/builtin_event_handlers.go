@@ -1,6 +1,7 @@
-package discord
+package main
 
 import (
+	. "elaina-common"
 	"encoding/json"
 	"log/slog"
 )
@@ -21,19 +22,19 @@ func interactionCreateEvent(payload InteractionCreatePayload) error { // Built-i
 		return nil
 	}
 
-	for _, command := range Commands {
-		if c.Name == command.Name {
-			if err := command.Dispatch(payload.GuildId, payload.Id, payload.Token, c); err != nil {
-				slog.Error("[Command] Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
-				_ = SendInteractionResponse(InteractionResponse{
-					Type: RespTypeChannelMessage,
-					Data: Message{Content: "An error occurred executing this command: " + err.Error(), Flags: MsgFlagEphemeral},
-				}, payload.Id, payload.Token)
-			}
-			return nil
-		}
+	command := Commands.GetCommand(c.Name)
+	if command == nil {
+		slog.Warn("[Command] Application command was dispatched but no handler was found: " + c.Name)
+		return nil
 	}
-	slog.Warn("[Command] Application command was dispatched but no handler was found: " + c.Name)
+
+	if err := dispatchCommand(command, payload.GuildId, payload.Id, payload.Token, c); err != nil {
+		slog.Error("[Command] Error executing application command: ", slog.String("command", c.Name), slog.String("error", err.Error()))
+		_ = SendInteractionResponse(InteractionResponse{
+			Type: RespTypeChannelMessage,
+			Data: Message{Content: "An error occurred executing this command: " + err.Error(), Flags: MsgFlagEphemeral},
+		}, payload.Id, payload.Token)
+	}
 	return nil
 }
 

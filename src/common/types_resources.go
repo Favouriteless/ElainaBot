@@ -1,41 +1,11 @@
-package discord
+package common
 
 import (
 	"encoding/json"
-	"strconv"
 )
 
-// StringInt64 is used to cleanly represent the 64-bit ints sent by discord API as they are serialized as strings
-type StringInt64 uint64
 type Snowflake = StringInt64
 type Permissions = StringInt64
-
-func (s *StringInt64) String() string {
-	return strconv.FormatUint(uint64(*s), 10)
-}
-
-func (s *StringInt64) UnmarshalJSON(data []byte) error {
-	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
-		return err
-	}
-	id, err := strconv.ParseUint(str, 10, 64)
-	if err != nil {
-		return err
-	}
-	*s = StringInt64(id)
-	return nil
-}
-
-func (s *StringInt64) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.String())
-}
-
-type ConnectionProperties struct {
-	Os      string `json:"os"`
-	Browser string `json:"browser"`
-	Device  string `json:"device"`
-}
 
 // Guild represents https://discord.com/developers/docs/resources/guild#guild-object.
 // Owner field is not included as it is impossible for a discord bot to own a guild
@@ -97,7 +67,7 @@ type UserPrimaryGuild struct {
 	Badge   string     `json:"badge"`             // Nullable
 }
 
-type App struct {
+type Application struct {
 	Id          Snowflake `json:"id"`
 	Name        string    `json:"name"`
 	Icon        string    `json:"icon"` // Nullable
@@ -126,7 +96,7 @@ type Message struct {
 	WebhookId Snowflake `json:"webhook_id,omitempty"` // Optional
 	Type      int       `json:"type"`
 	// Activity
-	Application       *App              `json:"application,omitempty"`        // Optional
+	Application       *Application      `json:"CommonSecrets,omitempty"`      // Optional
 	ApplicationId     Snowflake         `json:"application_id,omitempty"`     // Optional
 	Flags             int               `json:"flags,omitempty"`              // Optional
 	MessageReference  MessageReference  `json:"message_reference,omitempty"`  // Optional
@@ -192,7 +162,7 @@ type Attachment struct {
 	Description string    `json:"description"`
 	ContentType string    `json:"content_type"`
 	Size        int       `json:"size"`
-	URL         string    `json:"Url"`
+	URL         string    `json:"url"`
 	ProxyUrl    string    `json:"proxy_url"`
 	Height      *int      `json:"height"`
 	Width       *int      `json:"width"`
@@ -366,7 +336,7 @@ type GuildMember struct {
 	Pending                    *bool                 `json:"pending"`                      // Optional
 	Permissions                Permissions           `json:"permissions"`                  // Optional
 	CommunicationDisabledUntil string                `json:"communication_disabled_until"` // Optional
-	AvatarDecorationData       *AvatarDecorationData // Optional, nullable
+	AvatarDecorationData       *AvatarDecorationData `json:"avatar_decoration_data"`       // Optional, nullable
 }
 
 // ThreadMember represents https://discord.com/developers/docs/resources/channel#thread-member-object
@@ -393,7 +363,7 @@ type Interaction struct {
 	Id                  Snowflake        `json:"id"`
 	ApplicationId       Snowflake        `json:"application_id"`
 	Type                int              `json:"type"` // 1 = PING, 2 = APPLICATION_COMMAND, 3 = MESSAGE_COMPONENT, 4 = APPLICATION_COMMAND_AUTOCOMPLETE, 5 = MODAL_SUBMIT
-	Data                *json.RawMessage `json:"data"` // Always present on application Commands, message components & model submit. Optional for future proofing.
+	Data                *json.RawMessage `json:"data"` // Always present on CommonSecrets Commands, message components & model submit. Optional for future proofing.
 	Guild               *Guild           `json:"guild"`
 	GuildId             Snowflake        `json:"guild_id"`
 	Channel             *Channel         `json:"channel"`

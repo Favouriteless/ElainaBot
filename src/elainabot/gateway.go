@@ -1,6 +1,7 @@
-package discord
+package main
 
 import (
+	. "elaina-common"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,8 +61,14 @@ func (h *GatewayHandle) Close() {
 	h.Disconnect <- true
 }
 
-// ListenGateway initializes a gateway connection and returns a GatewayHandle for controlling it.
-func ListenGateway(intents int) *GatewayHandle {
+type connectionProperties struct {
+	Os      string `json:"os"`
+	Browser string `json:"browser"`
+	Device  string `json:"device"`
+}
+
+// listenGateway initializes a gateway connection and returns a GatewayHandle for controlling it.
+func listenGateway(intents int) *GatewayHandle {
 	slog.Info("[Gateway] Initializing connection...")
 
 	done := make(chan error)
@@ -106,7 +113,7 @@ func (gateway *gateway) connect() (reconnect bool, err error) {
 		return false, errors.New("could not fetch a gateway url: " + err.Error())
 	}
 
-	slog.Info("[Gateway] Attempting to connect:", slog.String("api_version", apiVersion), slog.String("api_encoding", apiEncoding))
+	slog.Info("[Gateway] Attempting to connect:", slog.String("api_version", ApiVersion), slog.String("api_encoding", ApiEncoding))
 	gateway.conn, _, err = websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		if os.IsTimeout(err) {
@@ -209,7 +216,7 @@ func (gateway *gateway) sendPayload(payload *gatewayPayload) {
 func (gateway *gateway) identify(resume bool) {
 	if resume {
 		id, err := json.Marshal(resumePayload{
-			Token:       application.token,
+			Token:       CommonSecrets.BotToken,
 			SessionId:   gateway.sessionId,
 			SequenceNum: gateway.sequence.Load(),
 		})
@@ -222,8 +229,8 @@ func (gateway *gateway) identify(resume bool) {
 		return
 	}
 	enc, err := json.Marshal(identifyPayload{
-		Token:      application.token,
-		Properties: ConnectionProperties{Os: "windows", Browser: application.name, Device: application.name},
+		Token:      CommonSecrets.BotToken,
+		Properties: connectionProperties{Os: "windows", Browser: "Elaina", Device: "Elaina"},
 		Intents:    gateway.intents,
 	})
 	if err != nil {
@@ -302,7 +309,7 @@ func (gateway *gateway) getConnectUrl() (string, error) {
 }
 
 func fetchGatewayUrl() (string, error) {
-	resp, err := Get(Url("gateway/bot"))
+	resp, err := Get(ApiUrl("gateway", "bot"))
 	if err != nil {
 		return "", err
 	}
@@ -323,5 +330,5 @@ func fetchGatewayUrl() (string, error) {
 	if data.Url == "" {
 		return "", errors.New("could not fetch gateway url. this is probably an issue on discord's end")
 	}
-	return fmt.Sprintf("%s/?v=%s&encoding=%s", data.Url, apiVersion, apiEncoding), nil
+	return fmt.Sprintf("%s/?v=%s&encoding=%s", data.Url, ApiVersion, ApiEncoding), nil
 }

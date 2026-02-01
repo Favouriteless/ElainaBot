@@ -1,4 +1,4 @@
-package discord
+package common
 
 // Message flag as specified by https://discord.com/developers/docs/resources/message#message-object-message-flags
 const (
@@ -92,4 +92,40 @@ const ( // Gateway intent bit as specified by https://discord.com/developers/doc
 	IntentAutoModExec            = 1 << 21
 	IntentGuildMessagePolls      = 1 << 24
 	IntentDirectMessagePolls     = 1 << 25
+)
+
+// CommandContext as specified by https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-context-types
+type CommandContext int
+
+const (
+	CmdContextGuild CommandContext = iota
+	CmdContextBotDm
+	CmdContextPrivateChannel
+)
+
+// CommandType as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-types
+type CommandType int
+
+const (
+	CmdTypeChatInput CommandType = iota + 1
+	CmdTypeUser
+	CmdTypeMessage
+	CmdTypePrimaryEntryPoint
+)
+
+// CommandOptionType as specified by https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-type
+type CommandOptionType int
+
+const (
+	CmdOptSubcommand CommandOptionType = iota + 1
+	CmdOptSubcommandGroup
+	CmdOptString
+	CmdOptInt
+	CmdOptBool
+	CmdOptUser
+	CmdOptChannel
+	CmdOptRole
+	CmdOptMentionable
+	CmdOptFloat64
+	CmdOptAttachment
 )
