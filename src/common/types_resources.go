@@ -423,7 +423,7 @@ type ResolvedData struct {
 	Roles       map[Snowflake]Role        `json:"roles"`
 	Channels    map[Snowflake]Channel     `json:"channels"`
 	Messages    map[Snowflake]Message     `json:"messages"`
-	Attachments map[Snowflake]Attachment  `json:"discord.Attachments"`
+	Attachments map[Snowflake]Attachment  `json:"attachments"`
 }
 
 // UnavailableGuild represents https://discord.com/developers/docs/resources/guild#unavailable-guild-object

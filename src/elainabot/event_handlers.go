@@ -2,6 +2,7 @@ package main
 
 import (
 	. "elaina-common"
+	"elaina-common/restapi"
 	"errors"
 	"log/slog"
 	"regexp"
@@ -28,7 +29,7 @@ func respondToNameEvent(payload CreateMessagePayload) error {
 	}
 
 	if elainaRegex.MatchString(payload.Content) {
-		if err := payload.CreateReaction(getConfig(HelloEmoji)); err != nil {
+		if err := restapi.CreateReaction(payload.ChannelId, payload.Id, getConfig(HelloEmoji)); err != nil {
 			slog.Error("[Elaina] Could not say hello to " + payload.Author.Username + ": " + err.Error())
 		} else {
 			slog.Info("[Elaina] Saying hello to " + payload.Author.Username)
@@ -51,12 +52,12 @@ func banHoneypotEvent(payload CreateMessagePayload) error {
 		return nil
 	}
 
-	guild, err := GetGuild(payload.GuildId)
+	guild, err := restapi.GetGuild(payload.GuildId)
 	if err != nil {
 		return err
 	}
 
-	channel, err := GetChannel(payload.ChannelId)
+	channel, err := restapi.GetChannel(payload.ChannelId)
 	if err != nil {
 		return err
 	}
@@ -66,13 +67,13 @@ func banHoneypotEvent(payload CreateMessagePayload) error {
 		return err
 	}
 
-	if err := ModifyGuildMember(payload.GuildId, payload.Author.Id, ModifyGuildMemberPayload{CommunicationDisabledUntil: &Nullable[time.Time]{Value: time.Now().Add(time.Minute * 15)}}); err != nil {
+	if err := restapi.ModifyGuildMember(payload.GuildId, payload.Author.Id, ModifyGuildMemberPayload{CommunicationDisabledUntil: &Nullable[time.Time]{Value: time.Now().Add(time.Minute * 15)}}); err != nil {
 		return errors.New("failed to timeout guild member: " + err.Error())
 	}
 	if err := banUser(payload.GuildId, payload.Author, "You typed in the honeypot channel. You can rejoin immediately, but you are timed out for 15 minutes.", 900); err != nil {
 		return errors.New("failed to ban user: " + err.Error())
 	}
-	if err := DeleteBan(payload.GuildId, payload.Author.Id); err != nil {
+	if err := restapi.DeleteBan(payload.GuildId, payload.Author.Id); err != nil {
 		return errors.New("failed to unban ban: " + err.Error())
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	. "elaina-common"
+	"elaina-common/restapi"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,7 +18,7 @@ func getMemberPerms(guild Guild, member GuildMember, user Snowflake) (Permission
 		return 1<<64 - 1, nil
 	}
 
-	everyone, err := guild.GetRole(guild.Id)
+	everyone, err := restapi.GetRole(guild.Id, guild.Id)
 	if err != nil {
 		return 0, err
 	}
@@ -27,7 +28,7 @@ func getMemberPerms(guild Guild, member GuildMember, user Snowflake) (Permission
 
 	perms := everyone.Permissions
 	for _, roleId := range member.Roles {
-		role, err := guild.GetRole(roleId)
+		role, err := restapi.GetRole(guild.Id, roleId)
 		if err != nil {
 			return 0, err
 		}
@@ -80,13 +81,13 @@ func getMemberPermsInChannel(guild Guild, member GuildMember, user Snowflake, ch
 func banUser(guild Snowflake, user User, reason string, deleteMessages int) error {
 	banMsg := "You have been banned.\nReason: " + reason
 
-	if dm, err := user.CreateDM(); err != nil { // Unlike timeout, the user MUST be notified before they leave the server, or the bot can't send a DM
+	if dm, err := restapi.CreateDM(user.Id); err != nil { // Unlike timeout, the user MUST be notified before they leave the server, or the bot can't send a DM
 		slog.Error("[Elaina] Failed to notify user of ban:", slog.String("user", user.Username), slog.String("error", err.Error()))
-	} else if _, err = dm.CreateMessage(banMsg, false); err != nil {
+	} else if _, err = restapi.CreateMessage(dm.Id, banMsg, false); err != nil {
 		slog.Error("[Elaina] Failed to notify user of ban:", slog.String("user", user.Username), slog.String("error", err.Error()))
 	}
 
-	if err := CreateBan(guild, user.Id, deleteMessages); err != nil {
+	if err := restapi.CreateBan(guild, user.Id, deleteMessages); err != nil {
 		return errors.New("failed to create ban: " + err.Error())
 	}
 
@@ -95,7 +96,7 @@ func banUser(guild Snowflake, user User, reason string, deleteMessages int) erro
 }
 
 func unbanUser(guild Snowflake, user Snowflake) error {
-	if err := DeleteBan(guild, user); err != nil { // Unban can't create a DM because we can't assume the user still shares a guild with Elaina
+	if err := restapi.DeleteBan(guild, user); err != nil { // Unban can't create a DM because we can't assume the user still shares a guild with Elaina
 		return errors.New("failed to unban user: " + err.Error())
 	}
 	slog.Info("[Elaina] Unbanned user: " + user.String())
@@ -108,14 +109,14 @@ func timeoutUser(guild Snowflake, user User, duration time.Duration, reason stri
 	go func() {
 		timeoutMsg := fmt.Sprintf("You have been timed out until <t:%d>.\nReason: %s", expires.Unix(), reason)
 
-		if dm, err := user.CreateDM(); err != nil {
+		if dm, err := restapi.CreateDM(user.Id); err != nil {
 			slog.Error("[Elaina] Failed to notify user of timeout:", slog.String("user", user.Username), slog.String("error", err.Error()))
-		} else if _, err = dm.CreateMessage(timeoutMsg, false); err != nil {
+		} else if _, err = restapi.CreateMessage(dm.Id, timeoutMsg, false); err != nil {
 			slog.Error("[Elaina] Failed to notify user of timeout:", slog.String("user", user.Username), slog.String("error", err.Error()))
 		}
 	}()
 
-	if err := ModifyGuildMember(guild, user.Id, ModifyGuildMemberPayload{CommunicationDisabledUntil: &Nullable[time.Time]{Value: expires}}); err != nil {
+	if err := restapi.ModifyGuildMember(guild, user.Id, ModifyGuildMemberPayload{CommunicationDisabledUntil: &Nullable[time.Time]{Value: expires}}); err != nil {
 		return errors.New("failed to modify guild member: " + err.Error())
 	}
 	slog.Info("[Elaina] User timed out:", slog.String("id", user.Id.String()), slog.Float64("duration", duration.Seconds()), slog.String("reason", reason))

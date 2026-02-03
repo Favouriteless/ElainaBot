@@ -2,11 +2,10 @@ package main
 
 import (
 	. "elaina-common"
+	"elaina-common/restapi"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"time"
 )
 
 // Commands contains all the bot commands Elaina is currently using
@@ -86,26 +85,12 @@ func DeployCommands(commands CommandCollection) {
 	slog.Info("Deploying application commands...")
 	for _, com := range commands {
 		func() {
-			resp, err := CreateOrUpdateCommand(com)
+			_, err := restapi.CreateOrUpdateCommand(com)
 			if err != nil {
 				slog.Error("Error registering command: ", slog.String("command", com.Name), slog.String("error", err.Error()))
 				return
 			}
-			defer resp.Body.Close()
-
-			switch resp.StatusCode {
-			case 200:
-				slog.Info("Command updated successfully: " + com.Name)
-			case 201:
-				slog.Info("Command added successfully: " + com.Name)
-			default:
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					panic(err) // Should never be hit
-				}
-				slog.Error("Command could not be created: ", slog.String("command", com.Name), slog.String("status_code", resp.Status), slog.String("body", string(body)))
-			}
+			slog.Info("Command added successfully: " + com.Name)
 		}()
-		time.Sleep(1 * time.Second) // This looks really stupid, but it's to avoid rate limiting
 	}
 }
