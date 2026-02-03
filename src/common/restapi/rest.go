@@ -17,10 +17,6 @@ import (
 
 const maxRestAttempts = 3
 
-var globalUnknownMu = &sync.Mutex{} // Requests with an unknown bucket will be executed synchronously, using a global mutex.
-var globalRetryAfter = atomic.Int64{}
-var buckets = make(map[string]*routeBucket)
-
 var routeCreateCommand = newApiRoute(http.MethodPost, "/applications/%d/commands", nil)
 var routeDeleteCommand = newApiRoute(http.MethodDelete, "/applications/%d/commands/%d", nil)
 
@@ -44,11 +40,15 @@ func newApiRoute(method string, path string, headers http.Header) *route {
 	return &route{method: method, path: path, headers: headers, urlToBucket: make(map[string]string)}
 }
 
+var globalRetryAfter = atomic.Int64{}
+var buckets = make(map[string]*routeBucket)
+
 type route struct {
 	method      string
 	path        string
 	headers     http.Header
 	urlToBucket map[string]string
+	unknownMu   sync.Mutex // Requests with an unknown bucket need to be executed synchronously
 }
 
 func (route *route) do(body []byte, attempt int, args ...any) (respBody []byte, err error) {
@@ -60,10 +60,10 @@ func (route *route) do(body []byte, attempt int, args ...any) (respBody []byte, 
 	url := BaseApiUrl + fmt.Sprintf(route.path, args...)
 
 	bucket := buckets[route.urlToBucket[url]]
-	if bucket == nil {
-		globalUnknownMu.Lock()
-	} else if bucket.consume() {
-		defer bucket.Unlock()
+	if bucket != nil {
+		bucket.consume()
+	} else {
+		route.unknownMu.Lock()
 	}
 
 	resp, err := SendHttp(route.method, url, bytes.NewReader(body), nil)
@@ -73,16 +73,17 @@ func (route *route) do(body []byte, attempt int, args ...any) (respBody []byte, 
 	defer resp.Body.Close()
 
 	if bucket != nil {
-		if err := bucket.update(resp.Header); err != nil {
-			resp.Body.Close()
+		err = bucket.update(resp.Header)
+		bucket.Unlock()
+		if err != nil {
 			return nil, err
 		}
 	} else {
-		globalUnknownMu.Unlock()
+		route.unknownMu.Unlock()
 		bucketId := resp.Header.Get("X-RateLimit-Bucket")
 
 		bucket = &routeBucket{id: bucketId}
-		if err := bucket.update(resp.Header); err != nil {
+		if err = bucket.update(resp.Header); err != nil {
 			return nil, err
 		}
 
@@ -105,7 +106,7 @@ func (route *route) do(body []byte, attempt int, args ...any) (respBody []byte, 
 		fallthrough
 	case http.StatusBadGateway:
 		if attempt < maxRestAttempts {
-			slog.Warn(fmt.Sprintf("[REST] Attempt %d failed, retrying...", attempt))
+			slog.Warn(fmt.Sprintf("[REST] Bad gateway: attempt %d failed, retrying...", attempt))
 			return route.do(body, attempt+1, args...)
 		}
 		return nil, fmt.Errorf("exceeded maximum number of retries")
