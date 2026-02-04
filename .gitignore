@@ -1,3 +1,7 @@
 .idea
 build
 run
+src/ocr/.gradle
+src/ocr/.vscode
+src/ocr/build
+src/ocr/bin

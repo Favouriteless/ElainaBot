@@ -1,0 +1,24 @@
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url = uri("https://mvnrepository.com/artifact/net.sourceforge.tess4j/tess4j")
+    }
+}
+
+dependencies {
+    implementation("net.sourceforge.tess4j:tess4j:5.18.0")
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+application {
+    mainClass = 'net.favouriteless.elainaocr.Main'
+}
