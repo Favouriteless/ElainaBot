@@ -2,15 +2,20 @@ FROM golang:1.25-alpine AS build-base
 
 WORKDIR /src
 
-COPY ./src/elainabot/go.mod ./src/elainabot/go.sum ./
-RUN go mod download
+# Copy module & workspace definitions
+COPY go.work go.work.sum ./
+COPY bot/go.mod bot/go.sum bot/
+COPY common/go.mod common/go.sum common/
+
+# Navigate to bot & download necessary dependencies
+RUN go mod -C ./bot download
 
 FROM build-base AS build
 
 ENV GOOS=linux GOARCH=amd64
 
-COPY ./src .
-RUN go build -C ./elainabot -o /build/elaina
+COPY bot common ./
+RUN go build -C ./bot -o /build/elaina
 
 FROM debian:stable-slim AS prod-base
 LABEL authors="Favouriteless"
@@ -21,7 +26,7 @@ RUN apt install -y ca-certificates
 FROM prod-base AS prod
 
 WORKDIR /run
-COPY ./src/common/migrations /run/migrations
+COPY ./common/migrations /run/migrations
 COPY --from=build /build/elaina /run/elaina
 
 ENTRYPOINT ["/run/elaina"]
