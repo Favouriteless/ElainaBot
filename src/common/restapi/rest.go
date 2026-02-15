@@ -33,7 +33,7 @@ var routeGetRole = newApiRoute(http.MethodGet, "/guilds/%d/roles/%d", nil)
 var routeGetGuildMember = newApiRoute(http.MethodGet, "/guilds/%d/members/%d", nil)
 var routeModifyGuildMember = newApiRoute(http.MethodPatch, "/guilds/%d/members/%d", nil)
 var routeKickGuildMember = newApiRoute(http.MethodDelete, "/guilds/%d/members/%d", nil)
-var routeCreateGuildBan = newApiRoute(http.MethodPost, "/guilds/%d/bans/%d", nil)
+var routeCreateGuildBan = newApiRoute(http.MethodPut, "/guilds/%d/bans/%d", nil)
 var routeDeleteGuildBan = newApiRoute(http.MethodDelete, "/guilds/%d/bans/%d", nil)
 
 func newApiRoute(method string, path string, headers http.Header) *route {
