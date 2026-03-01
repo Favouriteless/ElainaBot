@@ -26,6 +26,8 @@ RUN apt install -y ca-certificates
 
 FROM prod-base AS prod
 
+WORKDIR /run
+
 COPY --from=build-final /src/common/migrations /run/migrations
 COPY --from=build-final /build/elaina /run/elaina
 
